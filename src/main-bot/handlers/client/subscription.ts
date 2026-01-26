@@ -8,7 +8,7 @@ import type { MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type Client, type SubscriptionPlan } from '../../../database/index.js';
 import { createInvoice } from '../../../shared/integrations/nowpayments.js';
 import { config, PLATFORM } from '../../../shared/config/index.js';
-import { withFooter, formatDate, formatPrice, formatDuration, daysUntil } from '../../../shared/utils/index.js';
+import { withFooter, formatDate, formatPrice, formatDuration, daysUntil, addDays } from '../../../shared/utils/index.js';
 import { mainBotLogger as logger } from '../../../shared/utils/index.js';
 import { clientOnly } from '../../middleware/client.js';
 
@@ -168,6 +168,12 @@ async function showPlatformPlans(ctx: MainBotContext) {
 async function createPlatformInvoice(ctx: MainBotContext, planId: string) {
   const client = ctx.client!;
 
+  if (!config.NOWPAYMENTS_API_KEY) {
+    logger.warn('NOWPayments API key not configured for platform');
+    await ctx.reply('❌ Payment system is currently unavailable. Please contact support.');
+    return;
+  }
+
   try {
     const { data, error } = await supabase
       .from('subscription_plans')
@@ -182,11 +188,39 @@ async function createPlatformInvoice(ctx: MainBotContext, planId: string) {
       return;
     }
 
-    // Generate order ID
+    // Generate unique order ID
     const orderId = `platform_${client.id}_${Date.now()}`;
 
+    // Create NOWPayments invoice
+    const invoice = await createInvoice({
+      apiKey: config.NOWPAYMENTS_API_KEY,
+      priceAmount: Number(plan.price_amount),
+      priceCurrency: plan.price_currency,
+      orderId,
+      orderDescription: `TeleTrade Platform - ${plan.name}`,
+      ipnCallbackUrl: config.NOWPAYMENTS_IPN_CALLBACK_URL || '',
+    });
+
+    // Create pending transaction in database
+    const { data: transactionData, error: dbError } = await (supabase.from('payment_transactions') as any)
+      .insert({
+        payment_type: 'PLATFORM_SUBSCRIPTION',
+        client_id: client.id,
+        plan_id: plan.id,
+        nowpayments_invoice_id: String(invoice.id),
+        amount: plan.price_amount,
+        currency: plan.price_currency,
+        payment_status: 'PENDING',
+        expires_at: addDays(new Date(), 0).toISOString(), // Use 0 to default to now + invoice expiration
+      })
+      .select()
+      .single();
+
+    if (dbError) throw dbError;
+    const transaction = transactionData as any;
+
     const keyboard = new InlineKeyboard()
-      .text('🔄 Check Payment', `check_platform_payment:${planId}`)
+      .url('🌐 Pay with Crypto', invoice.invoice_url)
       .row()
       .text('« Back to Plans', 'platform_plans');
 
@@ -194,14 +228,12 @@ async function createPlatformInvoice(ctx: MainBotContext, planId: string) {
 💳 *Payment for ${plan.name}*
 
 *Amount:* ${formatPrice(Number(plan.price_amount), plan.price_currency)}
+*Duration:* ${formatDuration(plan.duration_days)}
 
-To complete your payment:
-1. Send the exact amount to our crypto wallet
-2. Click "Check Payment" after sending
+Click the button below to pay securely via NOWPayments.
+You will be redirected to a hosted checkout page.
 
-*Contact support for payment details.*
-
-Order ID: \`${orderId}\`
+_Invoice expires in ${PLATFORM.INVOICE_EXPIRATION_MINUTES} minutes._
 `;
 
     await ctx.reply(withFooter(message), {
@@ -209,19 +241,9 @@ Order ID: \`${orderId}\`
       reply_markup: keyboard,
     });
 
-    // Create pending transaction
-    await (supabase.from('payment_transactions') as any).insert({
-      payment_type: 'PLATFORM_SUBSCRIPTION',
-      client_id: client.id,
-      plan_id: plan.id,
-      amount: plan.price_amount,
-      currency: plan.price_currency,
-      payment_status: 'PENDING',
-    });
-
-    logger.info({ clientId: client.id, planId }, 'Platform payment initiated');
+    logger.info({ clientId: client.id, planId, transactionId: transaction.id }, 'Platform invoice created');
   } catch (error) {
     logger.error({ error, planId }, 'Failed to create platform invoice');
-    await ctx.reply('❌ Failed to process. Please try again.');
+    await ctx.reply('❌ Failed to generate payment invoice. Please try again.');
   }
 }

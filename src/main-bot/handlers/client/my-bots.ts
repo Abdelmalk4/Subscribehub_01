@@ -148,17 +148,13 @@ Click the button below to select your group.
     const linkingBotId = session.linkingBotId;
     if (!linkingBotId) return;
 
+    // Get chat info from shared message first (fallback)
     const sharedChat = ctx.message.chat_shared;
     const chatId = sharedChat.chat_id;
     const linkingType = session.linkingType || 'channel';
 
     try {
-      // Get chat info
-      const chat = await ctx.api.getChat(chatId);
-      const chatUsername = 'username' in chat ? chat.username : null;
-      const chatTitle = 'title' in chat ? chat.title : 'Unknown';
-
-      // Get the bot token to verify admin status
+      // Get the bot token FIRST to use for chat info
       const { data: botData } = await supabase
         .from('selling_bots')
         .select('bot_token')
@@ -175,12 +171,25 @@ Click the button below to select your group.
         return;
       }
 
-      // Verify selling bot is admin in the chat
+      let chatTitle = 'Unknown Chat';
+      let chatUsername: string | null = null;
+
+      // Verify selling bot is admin in the chat and get chat details
       try {
         const { Bot: GrammyBot } = await import('grammy');
         const tempBot = new GrammyBot(sellingBot.bot_token);
         const botInfo = await tempBot.api.getMe();
         
+        // Get chat details using the selling bot (which should be in the chat)
+        try {
+            const chat = await tempBot.api.getChat(chatId);
+            chatTitle = 'title' in chat ? (chat.title || 'Unknown Chat') : 'Unknown Chat';
+            chatUsername = 'username' in chat ? (chat.username || null) : null;
+        } catch (chatError: any) {
+            logger.warn({ error: chatError, chatId }, 'Failed to get chat info with selling bot');
+            // We can continue if we can't get details, but it's suspicious
+        }
+
         try {
             const botMember = await tempBot.api.getChatMember(chatId, botInfo.id);
             logger.info({ chatId, botMemberStatus: botMember.status }, 'Bot link check');
@@ -198,11 +207,11 @@ Click the button below to select your group.
         await ctx.reply(withFooter(`
 ❌ *Connection Failed*
 
-Your selling bot is not an admin in "${chatTitle}".
+Your selling bot is not an admin in the chat.
 
 *How to fix:*
 1. Open Telegram
-2. Go to "${chatTitle}"
+2. Go to the ${linkingType} settings
 3. Appoint your bot as Admin
 4. Try linking again
 

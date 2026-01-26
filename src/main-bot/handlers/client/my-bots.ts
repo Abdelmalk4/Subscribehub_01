@@ -1,12 +1,12 @@
 /**
- * My Bots Handler (Supabase version)
- * Client's bot management
+ * My Bots Handler - Complete Implementation with Channel/Group Linking and Plan CRUD
  */
 
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot, InlineKeyboard, Keyboard } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type SellingBot, type Subscriber, type SubscriptionPlan } from '../../../database/index.js';
-import { withFooter, formatDate } from '../../../shared/utils/index.js';
+import { withFooter, formatDate, formatPrice, formatDuration } from '../../../shared/utils/index.js';
+import { mainBotLogger as logger } from '../../../shared/utils/index.js';
 import { clientOnly } from '../../middleware/client.js';
 
 export function setupMyBotsHandler(bot: Bot<MainBotContext>) {
@@ -30,7 +30,7 @@ export function setupMyBotsHandler(bot: Bot<MainBotContext>) {
     await showBotSubscribers(ctx, botId);
   });
 
-  // Bot plans
+  // Bot plans (list with CRUD)
   bot.callbackQuery(/^bot_plans:(.+)$/, clientOnly(), async (ctx) => {
     const botId = ctx.match[1];
     await ctx.answerCallbackQuery();
@@ -54,75 +54,190 @@ export function setupMyBotsHandler(bot: Bot<MainBotContext>) {
   bot.callbackQuery(/^create_plan:(.+)$/, clientOnly(), async (ctx) => {
     const botId = ctx.match[1];
     await ctx.answerCallbackQuery();
-    ctx.session.planCreation = { botId };
+    (ctx.session as any).planCreation = { botId };
     await ctx.conversation.enter('planCreationConversation');
+  });
+
+  // Toggle plan active/inactive
+  bot.callbackQuery(/^toggle_plan:(.+)$/, clientOnly(), async (ctx) => {
+    const planId = ctx.match[1];
+    await ctx.answerCallbackQuery('Updating...');
+    await togglePlanStatus(ctx, planId);
+  });
+
+  // Delete plan confirmation
+  bot.callbackQuery(/^delete_plan:(.+)$/, clientOnly(), async (ctx) => {
+    const planId = ctx.match[1];
+    await ctx.answerCallbackQuery();
+    await showDeletePlanConfirm(ctx, planId);
+  });
+
+  // Confirm delete plan
+  bot.callbackQuery(/^confirm_delete_plan:(.+)$/, clientOnly(), async (ctx) => {
+    const planId = ctx.match[1];
+    await ctx.answerCallbackQuery('Deleting...');
+    await deletePlan(ctx, planId);
   });
 
   // Link channel to bot
   bot.callbackQuery(/^link_channel:(.+)$/, clientOnly(), async (ctx) => {
     const botId = ctx.match[1];
     await ctx.answerCallbackQuery();
-    ctx.session.linkingBotId = botId;
+    (ctx.session as any).linkingBotId = botId;
+    (ctx.session as any).linkingType = 'channel';
 
-    // Use KeyboardButtonRequestChat to let user select a channel
-    const { Keyboard } = await import('grammy');
     const keyboard = new Keyboard()
       .requestChat('📢 Select Channel', 1, {
         chat_is_channel: true,
-        bot_is_member: true,
       })
-      .placeholder('Select a channel to link')
+      .placeholder('Select a channel where your bot is admin')
       .oneTime()
       .resized();
 
     await ctx.reply(withFooter(`
 📢 *Link Channel*
 
-Click the button below to select a channel.
+Click the button below to select your channel.
 
-*Before linking:*
-1. Add your selling bot as an admin to the channel
-2. Give it permission to invite users
+*Requirements:*
+✅ Your selling bot must be an admin in the channel
+✅ You must have access to the channel
 
-_The channel picker will appear when you click the button._
+_Select the channel you want to link._
     `), {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
     });
   });
 
-  // Handle chat_shared event (when user selects a channel)
+  // Link group to bot
+  bot.callbackQuery(/^link_group:(.+)$/, clientOnly(), async (ctx) => {
+    const botId = ctx.match[1];
+    await ctx.answerCallbackQuery();
+    (ctx.session as any).linkingBotId = botId;
+    (ctx.session as any).linkingType = 'group';
+
+    const keyboard = new Keyboard()
+      .requestChat('👥 Select Group', 2, {
+        chat_is_channel: false,
+        chat_is_forum: false,
+      })
+      .placeholder('Select a group where your bot is admin')
+      .oneTime()
+      .resized();
+
+    await ctx.reply(withFooter(`
+👥 *Link Group*
+
+Click the button below to select your group.
+
+*Requirements:*
+✅ Your selling bot must be an admin in the group
+✅ You must have access to the group
+
+_Select the group you want to link._
+    `), {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  });
+
+  // Handle chat_shared event (when user selects a channel or group)
   bot.on('message:chat_shared', async (ctx) => {
-    const linkingBotId = ctx.session.linkingBotId;
+    const session = ctx.session as any;
+    const linkingBotId = session.linkingBotId;
     if (!linkingBotId) return;
 
     const sharedChat = ctx.message.chat_shared;
-    const channelId = sharedChat.chat_id;
+    const chatId = sharedChat.chat_id;
+    const linkingType = session.linkingType || 'channel';
 
     try {
-      // Get channel info
-      const chat = await ctx.api.getChat(channelId);
-      const channelUsername = 'username' in chat ? chat.username : null;
-      const channelTitle = 'title' in chat ? chat.title : 'Unknown';
+      // Get chat info
+      const chat = await ctx.api.getChat(chatId);
+      const chatUsername = 'username' in chat ? chat.username : null;
+      const chatTitle = 'title' in chat ? chat.title : 'Unknown';
+
+      // Get the bot token to verify admin status
+      const { data: botData } = await supabase
+        .from('selling_bots')
+        .select('bot_token')
+        .eq('id', linkingBotId)
+        .single();
+
+      const sellingBot = botData as { bot_token: string } | null;
+
+      if (!sellingBot) {
+        await ctx.reply('❌ Bot not found. Please try again.', {
+          reply_markup: { remove_keyboard: true },
+        });
+        session.linkingBotId = undefined;
+        return;
+      }
+
+      // Verify selling bot is admin in the chat
+      try {
+        const { Bot: GrammyBot } = await import('grammy');
+        const tempBot = new GrammyBot(sellingBot.bot_token);
+        const botMember = await tempBot.api.getChatMember(chatId, (await tempBot.api.getMe()).id);
+
+        if (!['administrator', 'creator'].includes(botMember.status)) {
+          await ctx.reply(withFooter(`
+❌ *Cannot Link ${linkingType === 'channel' ? 'Channel' : 'Group'}*
+
+Your selling bot is not an admin in "${chatTitle}".
+
+*To fix this:*
+1. Go to "${chatTitle}" settings
+2. Add your selling bot as an admin
+3. Try linking again
+          `), {
+            parse_mode: 'Markdown',
+            reply_markup: { remove_keyboard: true },
+          });
+          session.linkingBotId = undefined;
+          return;
+        }
+      } catch (verifyError) {
+        logger.error({ error: verifyError, chatId }, 'Failed to verify bot admin status');
+        await ctx.reply(withFooter(`
+❌ *Cannot Link ${linkingType === 'channel' ? 'Channel' : 'Group'}*
+
+Could not verify bot admin status in "${chatTitle}".
+
+*Possible reasons:*
+• Bot is not a member of the ${linkingType}
+• Bot doesn't have permission to view members
+
+Please add your selling bot as an admin and try again.
+        `), {
+          parse_mode: 'Markdown',
+          reply_markup: { remove_keyboard: true },
+        });
+        session.linkingBotId = undefined;
+        return;
+      }
 
       // Update bot with linked channel
       await (supabase.from('selling_bots') as any)
         .update({
-          linked_channel_id: channelId,
-          linked_channel_username: channelUsername,
+          linked_channel_id: chatId,
+          linked_channel_username: chatUsername,
         })
         .eq('id', linkingBotId);
 
       // Clear session
-      ctx.session.linkingBotId = undefined;
+      session.linkingBotId = undefined;
+      session.linkingType = undefined;
 
+      const emoji = linkingType === 'channel' ? '📢' : '👥';
       await ctx.reply(withFooter(`
-✅ *Channel Linked Successfully!*
+✅ *${linkingType === 'channel' ? 'Channel' : 'Group'} Linked Successfully!*
 
-*Channel:* ${channelTitle}
-${channelUsername ? `*Username:* @${channelUsername}` : ''}
+${emoji} *Name:* ${chatTitle}
+${chatUsername ? `*Username:* @${chatUsername}` : '_No public username_'}
 
-Your selling bot will now manage access to this channel.
+Your selling bot will now manage access to this ${linkingType}.
       `), {
         parse_mode: 'Markdown',
         reply_markup: { remove_keyboard: true },
@@ -131,22 +246,25 @@ Your selling bot will now manage access to this channel.
       // Refresh bot details
       await showBotDetails(ctx, linkingBotId);
     } catch (error) {
-      await ctx.reply('❌ Failed to link channel. Make sure your selling bot is an admin in the channel.', {
+      logger.error({ error, chatId }, 'Failed to link chat');
+      await ctx.reply('❌ Failed to link. Please try again.', {
         reply_markup: { remove_keyboard: true },
       });
+      session.linkingBotId = undefined;
     }
   });
 }
+
+// =====================
+// Helper Functions
+// =====================
 
 async function showMyBots(ctx: MainBotContext) {
   const client = ctx.client!;
 
   const { data, error } = await supabase
     .from('selling_bots')
-    .select(`
-      *,
-      subscribers(count)
-    `)
+    .select('*, subscribers(count)')
     .eq('client_id', client.id);
 
   const bots = data as Array<SellingBot & { subscribers: Array<{ count: number }> }> | null;
@@ -189,11 +307,7 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
 
   const { data, error } = await supabase
     .from('selling_bots')
-    .select(`
-      *,
-      subscribers(count),
-      subscription_plans(count)
-    `)
+    .select('*, subscribers(count), subscription_plans(count)')
     .eq('id', botId)
     .eq('client_id', client.id)
     .single();
@@ -222,6 +336,8 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
     .text('📋 Plans', `bot_plans:${bot.id}`)
     .row()
     .text('📢 Link Channel', `link_channel:${bot.id}`)
+    .text('👥 Link Group', `link_group:${bot.id}`)
+    .row()
     .text('➕ Add Plan', `create_plan:${bot.id}`)
     .row()
     .text(
@@ -230,6 +346,12 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
     )
     .row()
     .text('« Back to My Bots', 'my_bots');
+
+  const linkedInfo = bot.linked_channel_username 
+    ? `✅ @${bot.linked_channel_username}` 
+    : bot.linked_channel_id 
+      ? `✅ ID: ${bot.linked_channel_id}` 
+      : '❌ Not linked';
 
   const message = `
 🤖 *Bot: @${bot.bot_username}*
@@ -242,7 +364,7 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
 • Active Subscribers: ${activeSubscribers || 0}
 • Plans: ${planCount}
 
-*Channel:* ${bot.linked_channel_username ? `@${bot.linked_channel_username}` : 'Not linked'}
+*Linked Channel/Group:* ${linkedInfo}
 
 *Share Link:* t.me/${bot.bot_username}
 `;
@@ -256,10 +378,7 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
 async function showBotSubscribers(ctx: MainBotContext, botId: string) {
   const { data, error } = await supabase
     .from('subscribers')
-    .select(`
-      *,
-      subscription_plans(name)
-    `)
+    .select('*, subscription_plans(name)')
     .eq('bot_id', botId)
     .order('created_at', { ascending: false })
     .limit(10);
@@ -319,12 +438,12 @@ async function showBotPlans(ctx: MainBotContext, botId: string) {
 
   const keyboard = new InlineKeyboard()
     .text('➕ Create Plan', `create_plan:${botId}`)
-    .row()
-    .text('« Back to Bot', `view_bot:${botId}`);
+    .row();
 
   if (!plans || plans.length === 0) {
+    keyboard.text('« Back to Bot', `view_bot:${botId}`);
     await ctx.reply(
-      withFooter('📋 *Subscription Plans*\n\nNo plans created yet.'),
+      withFooter('📋 *Subscription Plans*\n\nNo plans created yet.\n\nCreate your first plan to start accepting subscribers!'),
       { parse_mode: 'Markdown', reply_markup: keyboard }
     );
     return;
@@ -335,8 +454,17 @@ async function showBotPlans(ctx: MainBotContext, botId: string) {
   for (const plan of plans) {
     const status = plan.is_active ? '✅' : '❌';
     message += `${status} *${plan.name}*\n`;
-    message += `   ${plan.price_amount} ${plan.price_currency} / ${plan.duration_days} days\n\n`;
+    message += `   ${formatPrice(plan.price_amount, plan.price_currency)} / ${formatDuration(plan.duration_days)}\n`;
+    if (plan.description) message += `   _${plan.description}_\n`;
+    message += '\n';
+
+    keyboard
+      .text(plan.is_active ? '⏸️' : '▶️', `toggle_plan:${plan.id}`)
+      .text('🗑️', `delete_plan:${plan.id}`)
+      .row();
   }
+
+  keyboard.text('« Back to Bot', `view_bot:${botId}`);
 
   await ctx.reply(withFooter(message), {
     parse_mode: 'Markdown',
@@ -363,8 +491,7 @@ async function toggleBotStatus(ctx: MainBotContext, botId: string) {
 
   const newStatus = bot.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
 
-  await (supabase
-    .from('selling_bots') as any)
+  await (supabase.from('selling_bots') as any)
     .update({ status: newStatus })
     .eq('id', botId);
 
@@ -374,6 +501,79 @@ async function toggleBotStatus(ctx: MainBotContext, botId: string) {
       : '⏸️ Bot paused. It will show "temporarily unavailable" to subscribers.'
   );
 
-  // Refresh bot details
   await showBotDetails(ctx, botId);
+}
+
+async function togglePlanStatus(ctx: MainBotContext, planId: string) {
+  const { data } = await supabase
+    .from('subscription_plans')
+    .select('is_active, bot_id')
+    .eq('id', planId)
+    .single();
+
+  const plan = data as { is_active: boolean; bot_id: string } | null;
+
+  if (!plan) {
+    await ctx.reply('❌ Plan not found');
+    return;
+  }
+
+  await (supabase.from('subscription_plans') as any)
+    .update({ is_active: !plan.is_active })
+    .eq('id', planId);
+
+  await ctx.reply(plan.is_active ? '⏸️ Plan deactivated.' : '✅ Plan activated.');
+  await showBotPlans(ctx, plan.bot_id);
+}
+
+async function showDeletePlanConfirm(ctx: MainBotContext, planId: string) {
+  const { data } = await supabase
+    .from('subscription_plans')
+    .select('name, bot_id')
+    .eq('id', planId)
+    .single();
+
+  const plan = data as { name: string; bot_id: string } | null;
+
+  if (!plan) {
+    await ctx.reply('❌ Plan not found');
+    return;
+  }
+
+  const keyboard = new InlineKeyboard()
+    .text('🗑️ Yes, Delete', `confirm_delete_plan:${planId}`)
+    .text('❌ Cancel', `bot_plans:${plan.bot_id}`);
+
+  await ctx.reply(withFooter(`
+⚠️ *Delete Plan*
+
+Are you sure you want to delete "${plan.name}"?
+
+This cannot be undone. Existing subscribers will keep their subscriptions, but no new subscribers can select this plan.
+  `), {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard,
+  });
+}
+
+async function deletePlan(ctx: MainBotContext, planId: string) {
+  const { data } = await supabase
+    .from('subscription_plans')
+    .select('bot_id')
+    .eq('id', planId)
+    .single();
+
+  const plan = data as { bot_id: string } | null;
+
+  if (!plan) {
+    await ctx.reply('❌ Plan not found');
+    return;
+  }
+
+  await (supabase.from('subscription_plans') as any)
+    .delete()
+    .eq('id', planId);
+
+  await ctx.reply('🗑️ Plan deleted.');
+  await showBotPlans(ctx, plan.bot_id);
 }

@@ -49,10 +49,11 @@ export function formatPlanButton(name: string, price: number, currency: string, 
 }
 
 /**
- * Add platform footer to message
+ * Add platform footer to message with clickable link
  */
 export function withFooter(message: string): string {
-  return `${message}\n\n_${PLATFORM.FOOTER}_`;
+  // Create clickable footer that links to the platform
+  return `${message}\n\n_Powered by_ [TeleTrade](https://t.me/TeleTradeBot)`;
 }
 
 /**

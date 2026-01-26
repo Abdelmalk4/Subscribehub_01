@@ -6,6 +6,7 @@ import { Bot, InlineKeyboard } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type Client, type SellingBot, type SubscriptionPlan, type Subscriber, type PaymentTransaction } from '../../../database/index.js';
 import { mainBotLogger as logger, withFooter, formatDate } from '../../../shared/utils/index.js';
+import { config } from '../../../shared/config/index.js';
 import { adminOnly } from '../../middleware/admin.js';
 
 export function setupAdminHandlers(bot: Bot<MainBotContext>) {
@@ -47,6 +48,74 @@ Configure your TeleTrade platform.
     `), { parse_mode: 'Markdown', reply_markup: keyboard });
   });
 
+  // Manage Platform Plans
+  bot.callbackQuery('admin_manage_plans', adminOnly(), async (ctx) => {
+    await ctx.answerCallbackQuery();
+    
+    const { data } = await supabase
+      .from('subscription_plans')
+      .select('*')
+      .eq('plan_type', 'PLATFORM')
+      .order('price_amount', { ascending: true });
+
+    const plans = data as SubscriptionPlan[] | null;
+    
+    const keyboard = new InlineKeyboard()
+      .text('➕ Create Platform Plan', 'admin_create_platform_plan')
+      .row();
+    
+    if (plans && plans.length > 0) {
+      for (const plan of plans) {
+        const status = plan.is_active ? '✅' : '❌';
+        keyboard.text(`${status} ${plan.name}`, `admin_edit_plan:${plan.id}`).row();
+      }
+    }
+    
+    keyboard.text('« Back to Settings', 'admin_settings');
+
+    const planList = plans && plans.length > 0
+      ? plans.map(p => `• *${p.name}* - $${p.price_amount} / ${p.duration_days} days ${p.is_active ? '✅' : '❌'}`).join('\n')
+      : '_No platform plans created yet._';
+
+    await ctx.reply(withFooter(`
+📋 *Platform Subscription Plans*
+
+These plans are offered to clients for platform access.
+
+${planList}
+    `), { parse_mode: 'Markdown', reply_markup: keyboard });
+  });
+
+  // IPN Settings
+  bot.callbackQuery('admin_ipn_settings', adminOnly(), async (ctx) => {
+    await ctx.answerCallbackQuery();
+    
+    const keyboard = new InlineKeyboard()
+      .text('📋 Copy IPN URL', 'admin_copy_ipn_url')
+      .row()
+      .text('« Back to Settings', 'admin_settings');
+
+    const ipnUrl = config.NOWPAYMENTS_IPN_CALLBACK_URL || 'Not configured';
+    const ipnSecret = config.NOWPAYMENTS_IPN_SECRET ? '✅ Configured' : '❌ Not set';
+
+    await ctx.reply(withFooter(`
+🔔 *IPN Settings*
+
+Configure NOWPayments webhook notifications.
+
+*IPN Callback URL:*
+\`${ipnUrl}\`
+
+*IPN Secret:* ${ipnSecret}
+
+*Setup Instructions:*
+1. Go to NOWPayments dashboard
+2. Navigate to Settings → IPN
+3. Set the callback URL above
+4. Copy the IPN secret to your .env file
+    `), { parse_mode: 'Markdown', reply_markup: keyboard });
+  });
+
   // Admin search client
   bot.callbackQuery('admin_search', adminOnly(), async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -57,41 +126,6 @@ Send the client's username or business name to search.
 
 _Example: @username or "Premium Signals"_
     `), { parse_mode: 'Markdown' });
-  });
-
-  // Handle text messages for admin search
-  bot.on('message:text', adminOnly(), async (ctx, next) => {
-    // Check if this might be a search query (admin context)
-    if (ctx.isAdmin && ctx.message.text && !ctx.message.text.startsWith('/')) {
-      const searchTerm = ctx.message.text.trim().replace(/^@/, '');
-      
-      // Try to find matching clients
-      const { data } = await supabase
-        .from('clients')
-        .select('id, business_name, username, status')
-        .or(`business_name.ilike.%${searchTerm}%,username.ilike.%${searchTerm}%`)
-        .limit(5);
-
-      const results = data as Array<Pick<Client, 'id' | 'business_name' | 'username' | 'status'>> | null;
-
-      if (results && results.length > 0) {
-        const keyboard = new InlineKeyboard();
-        for (const client of results) {
-          keyboard.text(
-            `${getStatusEmoji(client.status)} ${client.business_name}`,
-            `view_client:${client.id}`
-          ).row();
-        }
-        keyboard.text('« Back', 'start');
-
-        await ctx.reply(`🔍 *Search Results*\n\nFound ${results.length} client(s):`, {
-          parse_mode: 'Markdown',
-          reply_markup: keyboard,
-        });
-        return;
-      }
-    }
-    await next();
   });
 
   // Approve client

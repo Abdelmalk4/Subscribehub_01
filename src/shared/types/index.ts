@@ -38,8 +38,11 @@ export interface MainBotSessionData {
     description?: string;
     botId?: string;
   };
-  // Channel linking
+  // Channel/Group linking
   linkingBotId?: string;
+  linkingType?: 'channel' | 'group';
+  // Settings editing
+  editingField?: 'business_name' | 'email';
 }
 
 export interface SellingBotSessionData {

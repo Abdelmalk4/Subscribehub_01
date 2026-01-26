@@ -3,7 +3,7 @@
  * Manages subscription state and lifecycle (Supabase version)
  */
 
-import { supabase } from '../../../database/index.js';
+import { supabase, type SubscriptionPlan, type Subscriber, type SellingBot } from '../../../database/index.js';
 import { createLogger } from '../../../shared/utils/logger.js';
 import { addDays } from '../../../shared/utils/date.js';
 
@@ -17,11 +17,13 @@ export async function activateSubscription(
   planId: string
 ): Promise<boolean> {
   try {
-    const { data: plan } = await supabase
+    const { data } = await supabase
       .from('subscription_plans')
       .select('*')
       .eq('id', planId)
       .single();
+
+    const plan = data as SubscriptionPlan | null;
 
     if (!plan) {
       logger.error({ subscriberId, planId }, 'Plan not found');
@@ -31,8 +33,8 @@ export async function activateSubscription(
     const startDate = new Date();
     const endDate = addDays(startDate, plan.duration_days);
 
-    await supabase
-      .from('subscribers')
+    await (supabase
+      .from('subscribers') as any)
       .update({
         subscription_status: 'ACTIVE',
         subscription_start_date: startDate.toISOString(),
@@ -57,11 +59,13 @@ export async function extendSubscription(
   days: number
 ): Promise<Date | null> {
   try {
-    const { data: subscriber } = await supabase
+    const { data } = await supabase
       .from('subscribers')
       .select('subscription_end_date')
       .eq('id', subscriberId)
       .single();
+
+    const subscriber = data as Pick<Subscriber, 'subscription_end_date'> | null;
 
     if (!subscriber) return null;
 
@@ -71,8 +75,8 @@ export async function extendSubscription(
       : new Date();
     const newEndDate = addDays(baseDate, days);
 
-    await supabase
-      .from('subscribers')
+    await (supabase
+      .from('subscribers') as any)
       .update({
         subscription_status: 'ACTIVE',
         subscription_end_date: newEndDate.toISOString(),
@@ -92,8 +96,8 @@ export async function extendSubscription(
  */
 export async function expireSubscription(subscriberId: string): Promise<boolean> {
   try {
-    await supabase
-      .from('subscribers')
+    await (supabase
+      .from('subscribers') as any)
       .update({ subscription_status: 'EXPIRED' })
       .eq('id', subscriberId);
 
@@ -123,10 +127,20 @@ export async function getExpiredSubscriptions() {
     .eq('subscription_status', 'ACTIVE')
     .lt('subscription_end_date', new Date().toISOString());
 
-  return data?.map((sub) => ({
+  const typedData = data as Array<{
+    id: string;
+    telegram_user_id: number;
+    selling_bots: {
+      id: string;
+      bot_token: string;
+      linked_channel_id: number | null;
+    } | null;
+  }> | null;
+
+  return typedData?.map((sub) => ({
     id: sub.id,
     telegramUserId: sub.telegram_user_id,
-    bot: sub.selling_bots as any,
+    bot: sub.selling_bots,
   })) || [];
 }
 
@@ -153,11 +167,21 @@ export async function getExpiringSubscriptions(days: number) {
     .gte('subscription_end_date', targetDate.toISOString())
     .lt('subscription_end_date', nextDay.toISOString());
 
-  return data?.map((sub) => ({
+  const typedData = data as Array<{
+    id: string;
+    telegram_user_id: number;
+    subscription_end_date: string | null;
+    selling_bots: {
+      id: string;
+      bot_token: string;
+    } | null;
+  }> | null;
+
+  return typedData?.map((sub) => ({
     id: sub.id,
     telegramUserId: sub.telegram_user_id,
     subscriptionEndDate: new Date(sub.subscription_end_date!),
-    bot: sub.selling_bots as any,
+    bot: sub.selling_bots,
   })) || [];
 }
 
@@ -192,7 +216,7 @@ export async function logReminderSent(
   success: boolean,
   errorMessage?: string
 ): Promise<void> {
-  await supabase.from('notification_logs').insert({
+  await (supabase.from('notification_logs') as any).insert({
     recipient_type: 'subscriber',
     recipient_id: subscriberId,
     notification_type: 'renewal_reminder',

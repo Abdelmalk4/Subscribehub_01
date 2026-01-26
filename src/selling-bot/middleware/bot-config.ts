@@ -1,17 +1,17 @@
 /**
- * Bot Config Middleware
+ * Bot Config Middleware (Supabase version)
  * Loads selling bot configuration from Supabase
  */
 
 import { Middleware } from 'grammy';
-import { supabase } from '../../database/index.js';
+import { supabase, type SellingBot, type Client } from '../../database/index.js';
 import { sellingBotLogger as logger } from '../../shared/utils/index.js';
 import type { SellingBotContext, SellingBotConfig } from '../../shared/types/index.js';
 
 export function setupBotConfigMiddleware(botId: string): Middleware<SellingBotContext> {
   return async (ctx, next) => {
     try {
-      const { data: botConfig, error } = await supabase
+      const { data, error } = await supabase
         .from('selling_bots')
         .select(`
           *,
@@ -19,6 +19,8 @@ export function setupBotConfigMiddleware(botId: string): Middleware<SellingBotCo
         `)
         .eq('id', botId)
         .single();
+
+      const botConfig = data as (SellingBot & { clients: Pick<Client, 'status'> }) | null;
 
       if (error || !botConfig) {
         logger.error({ botId, error }, 'Bot config not found');
@@ -36,7 +38,7 @@ export function setupBotConfigMiddleware(botId: string): Middleware<SellingBotCo
       }
 
       // Check if client is active
-      const clientStatus = (botConfig.clients as any)?.status;
+      const clientStatus = botConfig.clients?.status;
       if (!['ACTIVE', 'TRIAL'].includes(clientStatus)) {
         await ctx.reply(
           '⚠️ This service is currently unavailable.\n\n' +

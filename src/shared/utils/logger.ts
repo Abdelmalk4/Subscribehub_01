@@ -3,7 +3,7 @@
  * Structured logging with Pino
  */
 
-import pino from 'pino';
+import { pino } from 'pino';
 import { config, isDevelopment } from '../config/index.js';
 
 export const logger = pino({

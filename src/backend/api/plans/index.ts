@@ -3,7 +3,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import { supabase } from '../../../database/index.js';
+import { supabase, type SubscriptionPlan } from '../../../database/index.js';
 import { createLogger } from '../../../shared/utils/logger.js';
 
 const logger = createLogger('api-plans');
@@ -23,8 +23,8 @@ export function registerPlanRoutes(app: FastifyInstance): void {
           query = query.eq('plan_type', request.query.type);
         }
 
-        const { data: plans } = await query.order('price_amount', { ascending: true });
-        return { plans };
+        const { data } = await query.order('price_amount', { ascending: true });
+        return { plans: data };
       } catch (error) {
         logger.error({ error }, 'Failed to get plans');
         return reply.status(500).send({ error: 'Failed to get plans' });
@@ -47,8 +47,8 @@ export function registerPlanRoutes(app: FastifyInstance): void {
     };
   }>('/plans', async (request, reply) => {
     try {
-      const { data: plan, error } = await supabase
-        .from('subscription_plans')
+      const { data, error } = await (supabase
+        .from('subscription_plans') as any)
         .insert({
           bot_id: request.body.botId,
           plan_type: request.body.planType,
@@ -65,6 +65,8 @@ export function registerPlanRoutes(app: FastifyInstance): void {
         .single();
 
       if (error) throw error;
+
+      const plan = data as SubscriptionPlan;
 
       logger.info({ planId: plan.id, name: plan.name }, 'Plan created');
       return { plan };
@@ -93,14 +95,16 @@ export function registerPlanRoutes(app: FastifyInstance): void {
       if (request.body.priceCurrency) updateData.price_currency = request.body.priceCurrency;
       if (request.body.isActive !== undefined) updateData.is_active = request.body.isActive;
 
-      const { data: plan, error } = await supabase
-        .from('subscription_plans')
+      const { data, error } = await (supabase
+        .from('subscription_plans') as any)
         .update(updateData)
         .eq('id', request.params.id)
         .select()
         .single();
 
       if (error) throw error;
+
+      const plan = data as SubscriptionPlan;
 
       logger.info({ planId: plan.id }, 'Plan updated');
       return { plan };
@@ -113,8 +117,8 @@ export function registerPlanRoutes(app: FastifyInstance): void {
   // Delete plan (soft delete)
   app.delete<{ Params: { id: string } }>('/plans/:id', async (request, reply) => {
     try {
-      await supabase
-        .from('subscription_plans')
+      await (supabase
+        .from('subscription_plans') as any)
         .update({ is_active: false })
         .eq('id', request.params.id);
 

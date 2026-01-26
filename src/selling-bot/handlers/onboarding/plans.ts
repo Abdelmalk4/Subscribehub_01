@@ -4,7 +4,7 @@
 
 import { Bot, InlineKeyboard } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
-import { supabase } from '../../../database/index.js';
+import { supabase, type SubscriptionPlan } from '../../../database/index.js';
 import { withFooter, formatPlanButton, formatDuration, formatPrice } from '../../../shared/utils/index.js';
 import { sellingBotLogger as logger } from '../../../shared/utils/index.js';
 
@@ -29,13 +29,15 @@ async function showPlans(ctx: SellingBotContext) {
   const botConfig = ctx.botConfig!;
 
   try {
-    const { data: plans } = await supabase
+    const { data } = await supabase
       .from('subscription_plans')
       .select('*')
       .eq('bot_id', botConfig.id)
       .eq('plan_type', 'CLIENT')
       .eq('is_active', true)
       .order('price_amount', { ascending: true });
+
+    const plans = data as SubscriptionPlan[] | null;
 
     if (!plans || plans.length === 0) {
       await ctx.reply(
@@ -77,11 +79,13 @@ async function showPlans(ctx: SellingBotContext) {
 
 async function selectPlan(ctx: SellingBotContext, planId: string) {
   try {
-    const { data: plan } = await supabase
+    const { data } = await supabase
       .from('subscription_plans')
       .select('*')
       .eq('id', planId)
       .single();
+
+    const plan = data as SubscriptionPlan | null;
 
     if (!plan || !plan.is_active) {
       await ctx.reply('❌ This plan is no longer available.');

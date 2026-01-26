@@ -3,7 +3,7 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import { supabase } from '../../../database/index.js';
+import { supabase, type SellingBot, type Client, type SubscriptionPlan, type Subscriber } from '../../../database/index.js';
 import { createLogger } from '../../../shared/utils/logger.js';
 
 const logger = createLogger('api-bots');
@@ -18,8 +18,8 @@ export function registerBotRoutes(app: FastifyInstance): void {
         query = query.eq('client_id', request.query.clientId);
       }
 
-      const { data: bots } = await query.order('created_at', { ascending: false });
-      return { bots };
+      const { data } = await query.order('created_at', { ascending: false });
+      return { bots: data };
     } catch (error) {
       logger.error({ error }, 'Failed to get bots');
       return reply.status(500).send({ error: 'Failed to get bots' });
@@ -29,11 +29,13 @@ export function registerBotRoutes(app: FastifyInstance): void {
   // Get bot by ID
   app.get<{ Params: { id: string } }>('/bots/:id', async (request, reply) => {
     try {
-      const { data: bot } = await supabase
+      const { data } = await supabase
         .from('selling_bots')
         .select('*, subscription_plans(*)')
         .eq('id', request.params.id)
         .single();
+
+      const bot = data as (SellingBot & { subscription_plans: SubscriptionPlan[] }) | null;
 
       if (!bot) {
         return reply.status(404).send({ error: 'Bot not found' });
@@ -49,12 +51,14 @@ export function registerBotRoutes(app: FastifyInstance): void {
   // Pause bot
   app.post<{ Params: { id: string } }>('/bots/:id/pause', async (request, reply) => {
     try {
-      const { data: bot } = await supabase
-        .from('selling_bots')
+      const { data } = await (supabase
+        .from('selling_bots') as any)
         .update({ status: 'PAUSED' })
         .eq('id', request.params.id)
         .select()
         .single();
+
+      const bot = data as SellingBot | null;
 
       logger.info({ botId: bot?.id }, 'Bot paused');
       return { success: true, bot };
@@ -67,12 +71,14 @@ export function registerBotRoutes(app: FastifyInstance): void {
   // Activate bot
   app.post<{ Params: { id: string } }>('/bots/:id/activate', async (request, reply) => {
     try {
-      const { data: bot } = await supabase
-        .from('selling_bots')
+      const { data } = await (supabase
+        .from('selling_bots') as any)
         .update({ status: 'ACTIVE' })
         .eq('id', request.params.id)
         .select()
         .single();
+
+      const bot = data as SellingBot | null;
 
       logger.info({ botId: bot?.id }, 'Bot activated');
       return { success: true, bot };
@@ -96,8 +102,8 @@ export function registerBotRoutes(app: FastifyInstance): void {
           query = query.eq('subscription_status', request.query.status);
         }
 
-        const { data: subscribers } = await query.order('created_at', { ascending: false });
-        return { subscribers };
+        const { data } = await query.order('created_at', { ascending: false });
+        return { subscribers: data };
       } catch (error) {
         logger.error({ error }, 'Failed to get subscribers');
         return reply.status(500).send({ error: 'Failed to get subscribers' });

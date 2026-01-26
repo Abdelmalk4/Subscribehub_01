@@ -24,13 +24,13 @@ export async function runExpirationCheck(): Promise<void> {
         await expireSubscription(sub.id);
 
         // Revoke channel access if linked
-        if (sub.bot.linkedChannelId) {
+        if (sub.bot && sub.bot.linked_channel_id) {
           await revokeChannelAccess(
             sub.id,
             sub.bot.id,
             sub.telegramUserId,
-            sub.bot.linkedChannelId,
-            sub.bot.botToken,
+            Number(sub.bot.linked_channel_id),
+            sub.bot.bot_token,
             'Subscription expired'
           );
         }

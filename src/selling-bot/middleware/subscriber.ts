@@ -1,10 +1,10 @@
 /**
- * Subscriber Middleware
+ * Subscriber Middleware (Supabase version)
  * Loads or creates subscriber record from Supabase
  */
 
 import { Middleware } from 'grammy';
-import { supabase } from '../../database/index.js';
+import { supabase, type Subscriber } from '../../database/index.js';
 import { sellingBotLogger as logger } from '../../shared/utils/index.js';
 import type { SellingBotContext } from '../../shared/types/index.js';
 
@@ -20,17 +20,19 @@ export function setupSubscriberMiddleware(): Middleware<SellingBotContext> {
 
     try {
       // Find subscriber
-      let { data: subscriber } = await supabase
+      let { data } = await supabase
         .from('subscribers')
         .select('*')
         .eq('telegram_user_id', telegramUserId)
         .eq('bot_id', botId)
         .single();
 
+      let subscriber = data as Subscriber | null;
+
       // Create new subscriber if not exists
       if (!subscriber) {
-        const { data: newSubscriber, error } = await supabase
-          .from('subscribers')
+        const { data: newSubData, error } = await (supabase
+          .from('subscribers') as any)
           .insert({
             telegram_user_id: telegramUserId,
             bot_id: botId,
@@ -43,7 +45,7 @@ export function setupSubscriberMiddleware(): Middleware<SellingBotContext> {
           .single();
 
         if (error) throw error;
-        subscriber = newSubscriber;
+        subscriber = newSubData as Subscriber;
 
         logger.info(
           { subscriberId: subscriber.id, botId, telegramUserId },

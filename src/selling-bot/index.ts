@@ -7,7 +7,7 @@ import { Bot, session } from 'grammy';
 import { conversations } from '@grammyjs/conversations';
 import { sellingBotLogger as logger } from '../shared/utils/index.js';
 import type { SellingBotContext, SellingBotSessionData } from '../shared/types/index.js';
-import { supabase } from '../database/index.js';
+import { supabase, type SellingBot, type Client } from '../database/index.js';
 
 // Import handlers
 import { setupStartHandler } from './handlers/onboarding/start.js';
@@ -15,8 +15,8 @@ import { setupPlansHandler } from './handlers/onboarding/plans.js';
 import { setupPaymentHandler } from './handlers/payment/invoice.js';
 import { setupStatusHandler } from './handlers/subscription/status.js';
 import { setupHelpHandler } from './handlers/support/help.js';
-import { setupJoinRequestHandler } from './handlers/subscription/join-request.ts';
-import { setupRenewalHandler } from './handlers/subscription/renewal.ts';
+import { setupJoinRequestHandler } from './handlers/subscription/join-request.js';
+import { setupRenewalHandler } from './handlers/subscription/renewal.js';
 
 // Import middleware
 import { setupBotConfigMiddleware } from './middleware/bot-config.js';
@@ -75,13 +75,15 @@ const activeBots = new Map<string, Bot<SellingBotContext>>();
 export async function startAllSellingBots(): Promise<void> {
   logger.info('Starting all active selling bots...');
 
-  const { data: bots, error } = await supabase
+  const { data, error } = await supabase
     .from('selling_bots')
     .select(`
       *,
       clients(status)
     `)
     .eq('status', 'ACTIVE');
+
+  const bots = data as Array<SellingBot & { clients: Pick<Client, 'status'> }> | null;
 
   if (error || !bots) {
     logger.error({ error }, 'Failed to fetch active bots');
@@ -90,8 +92,8 @@ export async function startAllSellingBots(): Promise<void> {
 
   for (const botConfig of bots) {
     // Skip if client is not active/trial
-    const clientStatus = (botConfig.clients as any)?.status;
-    if (!['ACTIVE', 'TRIAL'].includes(clientStatus)) {
+    const clientStatus = botConfig.clients?.status;
+    if (!['ACTIVE', 'TRIAL'].includes(clientStatus || '')) {
       logger.debug({ botId: botConfig.id }, 'Skipping bot - client not active');
       continue;
     }
@@ -140,7 +142,7 @@ export async function stopAllBots(): Promise<void> {
 // =================================
 
 // If running as standalone, start all bots
-if (process.argv[1].includes('selling-bot')) {
+if (process.argv[1] && process.argv[1].includes('selling-bot')) {
   startAllSellingBots().catch((error) => {
     logger.fatal({ error }, 'Failed to start selling bots');
     process.exit(1);

@@ -1,11 +1,11 @@
 /**
- * Bot Creation Conversation
- * Handles creating a new Selling Bot for a client (Supabase version)
+ * Bot Creation Conversation (Supabase version)
+ * Handles creating a new Selling Bot for a client
  */
 
 import { InlineKeyboard, Bot } from 'grammy';
 import type { MainBotConversation, MainBotContext } from '../../../shared/types/index.js';
-import { supabase } from '../../../database/index.js';
+import { supabase, type SellingBot } from '../../../database/index.js';
 import { mainBotLogger as logger, addDays, withFooter } from '../../../shared/utils/index.js';
 import { PLATFORM } from '../../../shared/config/index.js';
 
@@ -129,8 +129,8 @@ export async function botCreationConversation(
 
   // Create bot in database
   try {
-    const { data: bot, error } = await supabase
-      .from('selling_bots')
+    const { data: botData, error } = await (supabase
+      .from('selling_bots') as any)
       .insert({
         client_id: client.id,
         bot_token: botToken,
@@ -145,12 +145,14 @@ export async function botCreationConversation(
 
     if (error) throw error;
 
+    const bot = botData as SellingBot;
+
     // Activate trial if this is the first bot
     if (!client.trialActivated) {
       const trialEnd = addDays(new Date(), PLATFORM.TRIAL_DAYS);
 
-      await supabase
-        .from('clients')
+      await (supabase
+        .from('clients') as any)
         .update({
           status: 'TRIAL',
           trial_activated: true,

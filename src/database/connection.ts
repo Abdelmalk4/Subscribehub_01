@@ -11,7 +11,7 @@ import type { Database } from './types.js';
 const logger = createLogger('database');
 
 // Create Supabase client
-export const supabase: SupabaseClient<Database> = createClient<Database>(
+export const supabase = createClient<Database>(
   config.SUPABASE_URL,
   config.SUPABASE_SERVICE_ROLE_KEY,
   {

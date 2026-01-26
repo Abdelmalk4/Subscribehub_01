@@ -3,7 +3,7 @@
  * Business logic for client and bot management
  */
 
-import { supabase } from '../../database/index.js';
+import { supabase, type SellingBot, type Subscriber, type PaymentTransaction, type SubscriptionPlan } from '../../database/index.js';
 import { createLogger } from '../../shared/utils/logger.js';
 import { addDays } from '../../shared/utils/date.js';
 
@@ -14,28 +14,27 @@ const logger = createLogger('main-bot-service');
  */
 export async function getClientStats(clientId: string) {
   const [
-    { count: botsCount },
-    { count: activeSubscribers },
-    { data: revenueData }
+    botsCountRes,
+    activeSubscribersRes,
+    revenueRes
   ] = await Promise.all([
     supabase.from('selling_bots').select('*', { count: 'exact', head: true }).eq('client_id', clientId),
-    supabase.from('subscribers').select('*', { count: 'exact', head: true })
+    supabase.from('subscribers')
+      .select('id', { count: 'exact', head: true })
       .eq('subscription_status', 'ACTIVE')
-      .innerJoin('selling_bots', 'bot_id', 'id')
-      .eq('selling_bots.client_id', clientId),
-    supabase.from('payment_transactions').select('amount')
+      .filter('selling_bots.client_id', 'eq', clientId),
+    supabase.from('payment_transactions')
+      .select('amount')
       .eq('payment_type', 'SUBSCRIBER_SUBSCRIPTION')
       .eq('payment_status', 'CONFIRMED')
-      .innerJoin('subscribers', 'subscriber_id', 'id')
-      .innerJoin('selling_bots', 'subscribers.bot_id', 'id')
-      .eq('selling_bots.client_id', clientId),
+      .filter('subscribers.selling_bots.client_id', 'eq', clientId),
   ]);
 
-  const totalRevenue = (revenueData as any[])?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+  const totalRevenue = (revenueRes.data as any[])?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
 
   return {
-    botsCount: botsCount || 0,
-    activeSubscribers: activeSubscribers || 0,
+    botsCount: botsCountRes.count || 0,
+    activeSubscribers: activeSubscribersRes.count || 0,
     totalRevenue,
   };
 }
@@ -45,37 +44,33 @@ export async function getClientStats(clientId: string) {
  */
 export async function getBotStats(botId: string) {
   const [
-    { count: totalSubscribers },
-    { count: activeSubscribers },
-    { count: expiredSubscribers },
-    { data: revenueData },
-    { count: recentPayments },
+    totalSubscribersRes,
+    activeSubscribersRes,
+    expiredSubscribersRes,
+    revenueRes,
+    recentPaymentsRes,
   ] = await Promise.all([
     supabase.from('subscribers').select('*', { count: 'exact', head: true }).eq('bot_id', botId),
     supabase.from('subscribers').select('*', { count: 'exact', head: true }).eq('bot_id', botId).eq('subscription_status', 'ACTIVE'),
     supabase.from('subscribers').select('*', { count: 'exact', head: true }).eq('bot_id', botId).eq('subscription_status', 'EXPIRED'),
-    supabase.from('payment_transactions').select('amount').eq('payment_status', 'CONFIRMED').eq('subscriber_id', botId), // Error here in previous code? Should be joined with subscribers
+    supabase.from('payment_transactions')
+      .select('amount')
+      .eq('payment_status', 'CONFIRMED')
+      .filter('subscribers.bot_id', 'eq', botId),
     supabase.from('payment_transactions').select('*', { count: 'exact', head: true })
       .eq('payment_status', 'CONFIRMED')
+      .filter('subscribers.bot_id', 'eq', botId)
       .gte('confirmed_at', addDays(new Date(), -30).toISOString()),
   ]);
 
-  // Fix revenue data query
-  const { data: correctRevenue } = await supabase
-    .from('payment_transactions')
-    .select('amount')
-    .eq('payment_status', 'CONFIRMED')
-    .innerJoin('subscribers', 'subscriber_id', 'id')
-    .eq('subscribers.bot_id', botId);
-
-  const totalRevenue = (correctRevenue as any[])?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+  const totalRevenue = (revenueRes.data as any[])?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
 
   return {
-    totalSubscribers: totalSubscribers || 0,
-    activeSubscribers: activeSubscribers || 0,
-    expiredSubscribers: expiredSubscribers || 0,
+    totalSubscribers: totalSubscribersRes.count || 0,
+    activeSubscribers: activeSubscribersRes.count || 0,
+    expiredSubscribers: expiredSubscribersRes.count || 0,
     totalRevenue,
-    last30DaysPayments: recentPayments || 0,
+    last30DaysPayments: recentPaymentsRes.count || 0,
   };
 }
 
@@ -95,8 +90,8 @@ export async function updateBotSettings(
   if (settings.linkedChannelId) updateData.linked_channel_id = Number(settings.linkedChannelId);
   if (settings.linkedChannelUsername) updateData.linked_channel_username = settings.linkedChannelUsername;
 
-  return supabase
-    .from('selling_bots')
+  return (supabase
+    .from('selling_bots') as any)
     .update(updateData)
     .eq('id', botId);
 }
@@ -114,8 +109,8 @@ export async function createPlan(
     priceCurrency: string;
   }
 ) {
-  const { data: plan, error } = await supabase
-    .from('subscription_plans')
+  const { data: planData, error } = await (supabase
+    .from('subscription_plans') as any)
     .insert({
       bot_id: botId,
       plan_type: 'CLIENT',
@@ -134,6 +129,8 @@ export async function createPlan(
     throw error;
   }
 
+  const plan = planData as SubscriptionPlan;
+
   logger.info({ planId: plan.id, botId, name: plan.name }, 'Plan created');
   return plan;
 }
@@ -142,16 +139,18 @@ export async function createPlan(
  * Toggle plan active status
  */
 export async function togglePlanStatus(planId: string): Promise<boolean> {
-  const { data: plan } = await supabase
+  const { data } = await supabase
     .from('subscription_plans')
     .select('is_active')
     .eq('id', planId)
     .single();
 
+  const plan = data as Pick<SubscriptionPlan, 'is_active'> | null;
+
   if (!plan) return false;
 
-  await supabase
-    .from('subscription_plans')
+  await (supabase
+    .from('subscription_plans') as any)
     .update({ is_active: !plan.is_active })
     .eq('id', planId);
 

@@ -4,7 +4,7 @@
 
 import { Bot, InlineKeyboard } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
-import { supabase } from '../../../database/index.js';
+import { supabase, type SubscriptionPlan, type PaymentTransaction } from '../../../database/index.js';
 import { createInvoice } from '../../../shared/integrations/nowpayments.js';
 import { withFooter, formatPrice, addDays } from '../../../shared/utils/index.js';
 import { sellingBotLogger as logger } from '../../../shared/utils/index.js';
@@ -29,11 +29,13 @@ async function createPaymentInvoice(ctx: SellingBotContext, planId: string) {
   const subscriber = ctx.subscriber!;
 
   try {
-    const { data: plan } = await supabase
+    const { data } = await supabase
       .from('subscription_plans')
       .select('*')
       .eq('id', planId)
       .single();
+
+    const plan = data as SubscriptionPlan | null;
 
     if (!plan || !plan.is_active) {
       await ctx.reply('❌ This plan is no longer available.');
@@ -51,13 +53,13 @@ async function createPaymentInvoice(ctx: SellingBotContext, planId: string) {
       ipnCallbackUrl: config.NOWPAYMENTS_IPN_CALLBACK_URL || '',
     });
 
-    const { data: transaction } = await supabase
-      .from('payment_transactions')
+    const { data: transactionData } = await (supabase
+      .from('payment_transactions') as any)
       .insert({
         payment_type: 'SUBSCRIBER_SUBSCRIPTION',
         subscriber_id: subscriber.id,
         plan_id: plan.id,
-        nowpayments_invoice_id: invoice.id,
+        nowpayments_invoice_id: String(invoice.id),
         amount: plan.price_amount,
         currency: plan.price_currency,
         payment_status: 'PENDING',
@@ -66,10 +68,12 @@ async function createPaymentInvoice(ctx: SellingBotContext, planId: string) {
       .select()
       .single();
 
+    const transaction = transactionData as PaymentTransaction | null;
+
     ctx.session.purchase = {
       step: 'awaiting_payment',
       planId: plan.id,
-      invoiceId: invoice.id,
+      invoiceId: String(invoice.id),
       amount: plan.price_amount,
       currency: plan.price_currency,
     };
@@ -106,11 +110,13 @@ Click the button below to complete payment:
 
 async function checkPaymentStatus(ctx: SellingBotContext, transactionId: string) {
   try {
-    const { data: transaction } = await supabase
+    const { data } = await supabase
       .from('payment_transactions')
       .select('*, subscription_plans(*)')
       .eq('id', transactionId)
       .single();
+
+    const transaction = data as (PaymentTransaction & { subscription_plans: SubscriptionPlan }) | null;
 
     if (!transaction) {
       await ctx.reply('❌ Transaction not found.');

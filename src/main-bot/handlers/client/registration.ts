@@ -1,11 +1,11 @@
 /**
- * Client Registration Conversation
- * Handles new client onboarding flow (Supabase version)
+ * Client Registration Conversation (Supabase version)
+ * Handles new client onboarding flow
  */
 
 import { InlineKeyboard } from 'grammy';
 import type { MainBotConversation, MainBotContext } from '../../../shared/types/index.js';
-import { supabase } from '../../../database/index.js';
+import { supabase, type Client } from '../../../database/index.js';
 import { mainBotLogger as logger } from '../../../shared/utils/index.js';
 import { withFooter } from '../../../shared/utils/format.js';
 
@@ -94,8 +94,8 @@ export async function registrationConversation(
 
   // Create client in database
   try {
-    const { data: client, error } = await supabase
-      .from('clients')
+    const { data: clientData, error } = await (supabase
+      .from('clients') as any)
       .insert({
         telegram_user_id: userId,
         username: username ?? null,
@@ -108,6 +108,8 @@ export async function registrationConversation(
       .single();
 
     if (error) throw error;
+
+    const client = clientData as Client;
 
     logger.info({ clientId: client.id, userId }, 'New client registered');
 

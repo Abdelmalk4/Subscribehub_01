@@ -3,7 +3,7 @@
  * Manages client trial periods (Supabase version)
  */
 
-import { supabase } from '../../../database/index.js';
+import { supabase, type Client, type SellingBot } from '../../../database/index.js';
 import { createLogger } from '../../../shared/utils/logger.js';
 import { addDays } from '../../../shared/utils/date.js';
 import { PLATFORM } from '../../../shared/config/index.js';
@@ -15,11 +15,13 @@ const logger = createLogger('trial-service');
  */
 export async function activateTrial(clientId: string): Promise<boolean> {
   try {
-    const { data: client } = await supabase
+    const { data } = await supabase
       .from('clients')
       .select('trial_activated')
       .eq('id', clientId)
       .single();
+
+    const client = data as Pick<Client, 'trial_activated'> | null;
 
     if (!client) {
       logger.error({ clientId }, 'Client not found');
@@ -34,8 +36,8 @@ export async function activateTrial(clientId: string): Promise<boolean> {
     const startDate = new Date();
     const endDate = addDays(startDate, PLATFORM.TRIAL_DAYS);
 
-    await supabase
-      .from('clients')
+    await (supabase
+      .from('clients') as any)
       .update({
         status: 'TRIAL',
         trial_activated: true,
@@ -67,7 +69,9 @@ export async function getExpiringTrials(days: number) {
     .gte('trial_end_date', targetDate.toISOString())
     .lt('trial_end_date', nextDay.toISOString());
 
-  return data?.map((c) => ({
+  const typedData = data as Array<Pick<Client, 'id' | 'telegram_user_id' | 'trial_end_date' | 'business_name'>> | null;
+
+  return typedData?.map((c) => ({
     id: c.id,
     telegramUserId: c.telegram_user_id,
     trialEndDate: new Date(c.trial_end_date!),
@@ -90,7 +94,14 @@ export async function getExpiredTrials() {
     .eq('status', 'TRIAL')
     .lt('trial_end_date', new Date().toISOString());
 
-  return data?.map((c) => ({
+  const typedData = data as Array<{
+    id: string;
+    telegram_user_id: number;
+    business_name: string;
+    selling_bots: Array<{ id: string }> | null;
+  }> | null;
+
+  return typedData?.map((c) => ({
     id: c.id,
     telegramUserId: c.telegram_user_id,
     businessName: c.business_name,
@@ -104,14 +115,14 @@ export async function getExpiredTrials() {
 export async function expireTrial(clientId: string): Promise<boolean> {
   try {
     // Update client status
-    await supabase
-      .from('clients')
+    await (supabase
+      .from('clients') as any)
       .update({ status: 'EXPIRED' })
       .eq('id', clientId);
 
     // Pause all selling bots
-    await supabase
-      .from('selling_bots')
+    await (supabase
+      .from('selling_bots') as any)
       .update({ status: 'PAUSED' })
       .eq('client_id', clientId)
       .eq('status', 'ACTIVE');
@@ -155,7 +166,7 @@ export async function logTrialReminderSent(
   success: boolean,
   errorMessage?: string
 ): Promise<void> {
-  await supabase.from('notification_logs').insert({
+  await (supabase.from('notification_logs') as any).insert({
     recipient_type: 'client',
     recipient_id: clientId,
     notification_type: 'trial_reminder',

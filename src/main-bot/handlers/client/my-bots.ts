@@ -5,7 +5,7 @@
 
 import { Bot, InlineKeyboard } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
-import { supabase } from '../../../database/index.js';
+import { supabase, type SellingBot, type Subscriber, type SubscriptionPlan } from '../../../database/index.js';
 import { withFooter, formatDate } from '../../../shared/utils/index.js';
 import { clientOnly } from '../../middleware/client.js';
 
@@ -54,13 +54,15 @@ export function setupMyBotsHandler(bot: Bot<MainBotContext>) {
 async function showMyBots(ctx: MainBotContext) {
   const client = ctx.client!;
 
-  const { data: bots, error } = await supabase
+  const { data, error } = await supabase
     .from('selling_bots')
     .select(`
       *,
       subscribers(count)
     `)
     .eq('client_id', client.id);
+
+  const bots = data as Array<SellingBot & { subscribers: Array<{ count: number }> }> | null;
 
   if (error) {
     await ctx.reply('❌ Failed to load your bots.');
@@ -74,7 +76,7 @@ async function showMyBots(ctx: MainBotContext) {
   } else {
     for (const bot of bots) {
       const statusEmoji = bot.status === 'ACTIVE' ? '🟢' : '🔴';
-      const subscriberCount = (bot.subscribers as any)?.[0]?.count || 0;
+      const subscriberCount = bot.subscribers?.[0]?.count || 0;
       keyboard.text(
         `${statusEmoji} @${bot.bot_username} (${subscriberCount})`,
         `view_bot:${bot.id}`
@@ -98,7 +100,7 @@ async function showMyBots(ctx: MainBotContext) {
 async function showBotDetails(ctx: MainBotContext, botId: string) {
   const client = ctx.client!;
 
-  const { data: bot, error } = await supabase
+  const { data, error } = await supabase
     .from('selling_bots')
     .select(`
       *,
@@ -108,6 +110,11 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
     .eq('id', botId)
     .eq('client_id', client.id)
     .single();
+
+  const bot = data as (SellingBot & { 
+    subscribers: Array<{ count: number }>; 
+    subscription_plans: Array<{ count: number }>;
+  }) | null;
 
   if (error || !bot) {
     await ctx.reply('❌ Bot not found');
@@ -120,8 +127,8 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
     .eq('bot_id', bot.id)
     .eq('subscription_status', 'ACTIVE');
 
-  const subscriberCount = (bot.subscribers as any)?.[0]?.count || 0;
-  const planCount = (bot.subscription_plans as any)?.[0]?.count || 0;
+  const subscriberCount = bot.subscribers?.[0]?.count || 0;
+  const planCount = bot.subscription_plans?.[0]?.count || 0;
 
   const keyboard = new InlineKeyboard()
     .text('👥 Subscribers', `bot_subscribers:${bot.id}`)
@@ -157,7 +164,7 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
 }
 
 async function showBotSubscribers(ctx: MainBotContext, botId: string) {
-  const { data: subscribers, error } = await supabase
+  const { data, error } = await supabase
     .from('subscribers')
     .select(`
       *,
@@ -166,6 +173,8 @@ async function showBotSubscribers(ctx: MainBotContext, botId: string) {
     .eq('bot_id', botId)
     .order('created_at', { ascending: false })
     .limit(10);
+
+  const subscribers = data as Array<Subscriber & { subscription_plans: SubscriptionPlan }> | null;
 
   if (error) {
     await ctx.reply('❌ Failed to load subscribers.');
@@ -188,7 +197,7 @@ async function showBotSubscribers(ctx: MainBotContext, botId: string) {
   for (const sub of subscribers) {
     const statusEmoji = sub.subscription_status === 'ACTIVE' ? '✅' : '❌';
     const username = sub.username ? `@${sub.username}` : sub.first_name || 'Unknown';
-    const plan = (sub.subscription_plans as any)?.name || 'N/A';
+    const plan = sub.subscription_plans?.name || 'N/A';
     const expiry = sub.subscription_end_date ? formatDate(new Date(sub.subscription_end_date)) : 'N/A';
 
     message += `${statusEmoji} ${username}\n`;
@@ -204,12 +213,14 @@ async function showBotSubscribers(ctx: MainBotContext, botId: string) {
 }
 
 async function showBotPlans(ctx: MainBotContext, botId: string) {
-  const { data: plans, error } = await supabase
+  const { data, error } = await supabase
     .from('subscription_plans')
     .select('*')
     .eq('bot_id', botId)
     .eq('plan_type', 'CLIENT')
     .order('price_amount', { ascending: true });
+
+  const plans = data as SubscriptionPlan[] | null;
 
   if (error) {
     await ctx.reply('❌ Failed to load plans.');
@@ -246,12 +257,14 @@ async function showBotPlans(ctx: MainBotContext, botId: string) {
 async function toggleBotStatus(ctx: MainBotContext, botId: string) {
   const client = ctx.client!;
 
-  const { data: bot } = await supabase
+  const { data } = await supabase
     .from('selling_bots')
     .select('status')
     .eq('id', botId)
     .eq('client_id', client.id)
     .single();
+
+  const bot = data as Pick<SellingBot, 'status'> | null;
 
   if (!bot) {
     await ctx.reply('❌ Bot not found');
@@ -260,8 +273,8 @@ async function toggleBotStatus(ctx: MainBotContext, botId: string) {
 
   const newStatus = bot.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
 
-  await supabase
-    .from('selling_bots')
+  await (supabase
+    .from('selling_bots') as any)
     .update({ status: newStatus })
     .eq('id', botId);
 

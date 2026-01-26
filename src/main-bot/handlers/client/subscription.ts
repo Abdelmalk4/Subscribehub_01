@@ -5,7 +5,7 @@
 
 import { Bot, InlineKeyboard } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
-import { supabase } from '../../../database/index.js';
+import { supabase, type Client, type SubscriptionPlan } from '../../../database/index.js';
 import { createInvoice } from '../../../shared/integrations/nowpayments.js';
 import { config, PLATFORM } from '../../../shared/config/index.js';
 import { withFooter, formatDate, formatPrice, formatDuration, daysUntil } from '../../../shared/utils/index.js';
@@ -40,11 +40,13 @@ export function setupSubscriptionHandler(bot: Bot<MainBotContext>) {
 async function showSubscriptionStatus(ctx: MainBotContext) {
   const client = ctx.client!;
 
-  const { data: fullClient, error } = await supabase
+  const { data, error } = await supabase
     .from('clients')
     .select('*, subscription_plans(*)')
     .eq('id', client.id)
     .single();
+
+  const fullClient = data as (Client & { subscription_plans: SubscriptionPlan | null }) | null;
 
   if (error || !fullClient) return;
 
@@ -71,7 +73,7 @@ Upgrade now to ensure uninterrupted service!
       reply_markup: keyboard,
     });
   } else if (fullClient.status === 'ACTIVE') {
-    const plan = fullClient.subscription_plans as any;
+    const plan = fullClient.subscription_plans;
     const daysLeft = fullClient.platform_subscription_end
       ? daysUntil(new Date(fullClient.platform_subscription_end))
       : 0;
@@ -123,12 +125,14 @@ Reactivate now to resume service!
 }
 
 async function showPlatformPlans(ctx: MainBotContext) {
-  const { data: plans, error } = await supabase
+  const { data, error } = await supabase
     .from('subscription_plans')
     .select('*')
     .eq('plan_type', 'PLATFORM')
     .eq('is_active', true)
     .order('price_amount', { ascending: true });
+
+  const plans = data as SubscriptionPlan[] | null;
 
   if (error || !plans || plans.length === 0) {
     await ctx.reply(withFooter('❌ No subscription plans available. Contact support.'));
@@ -165,11 +169,13 @@ async function createPlatformInvoice(ctx: MainBotContext, planId: string) {
   const client = ctx.client!;
 
   try {
-    const { data: plan, error } = await supabase
+    const { data, error } = await supabase
       .from('subscription_plans')
       .select('*')
       .eq('id', planId)
       .single();
+
+    const plan = data as SubscriptionPlan | null;
 
     if (error || !plan || plan.plan_type !== 'PLATFORM') {
       await ctx.reply('❌ Invalid plan selected.');
@@ -204,7 +210,7 @@ Order ID: \`${orderId}\`
     });
 
     // Create pending transaction
-    await supabase.from('payment_transactions').insert({
+    await (supabase.from('payment_transactions') as any).insert({
       payment_type: 'PLATFORM_SUBSCRIPTION',
       client_id: client.id,
       plan_id: plan.id,

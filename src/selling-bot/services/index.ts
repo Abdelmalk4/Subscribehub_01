@@ -3,7 +3,7 @@
  * Business logic for subscriber management
  */
 
-import { supabase } from '../../database/index.js';
+import { supabase, type Subscriber, type SubscriptionPlan, type PaymentTransaction, type SellingBot } from '../../database/index.js';
 import { createLogger } from '../../shared/utils/logger.js';
 
 const logger = createLogger('selling-bot-service');
@@ -20,16 +20,18 @@ export async function getOrCreateSubscriber(
     lastName?: string;
   }
 ) {
-  let { data: subscriber } = await supabase
+  let { data } = await supabase
     .from('subscribers')
     .select('*')
     .eq('telegram_user_id', Number(telegramUserId))
     .eq('bot_id', botId)
     .single();
 
+  let subscriber = data as Subscriber | null;
+
   if (!subscriber) {
-    const { data: newSubscriber, error } = await supabase
-      .from('subscribers')
+    const { data: newSubData, error } = await (supabase
+      .from('subscribers') as any)
       .insert({
         telegram_user_id: Number(telegramUserId),
         bot_id: botId,
@@ -45,7 +47,7 @@ export async function getOrCreateSubscriber(
       logger.error({ error, botId, telegramUserId }, 'Failed to create subscriber');
       throw error;
     }
-    subscriber = newSubscriber;
+    subscriber = newSubData as Subscriber;
     logger.info({ subscriberId: subscriber.id, botId }, 'New subscriber created');
   }
 
@@ -56,11 +58,17 @@ export async function getOrCreateSubscriber(
  * Get subscriber with full details
  */
 export async function getSubscriberDetails(subscriberId: string) {
-  const { data: subscriber, error } = await supabase
+  const { data, error } = await supabase
     .from('subscribers')
     .select('*, subscription_plans(*), selling_bots(bot_username, linked_channel_username), payment_transactions(*)')
     .eq('id', subscriberId)
     .single();
+
+  const subscriber = data as (Subscriber & { 
+    subscription_plans: SubscriptionPlan | null; 
+    selling_bots: Pick<SellingBot, 'bot_username' | 'linked_channel_username'>;
+    payment_transactions: PaymentTransaction[];
+  }) | null;
 
   if (error) return null;
   return subscriber;
@@ -70,7 +78,7 @@ export async function getSubscriberDetails(subscriberId: string) {
  * Get active plans for a bot
  */
 export async function getActivePlans(botId: string) {
-  const { data: plans } = await supabase
+  const { data } = await supabase
     .from('subscription_plans')
     .select('*')
     .eq('bot_id', botId)
@@ -78,6 +86,7 @@ export async function getActivePlans(botId: string) {
     .eq('is_active', true)
     .order('price_amount', { ascending: true });
 
+  const plans = data as SubscriptionPlan[] | null;
   return plans || [];
 }
 
@@ -85,7 +94,7 @@ export async function getActivePlans(botId: string) {
  * Get pending payment for subscriber
  */
 export async function getPendingPayment(subscriberId: string) {
-  const { data: transaction } = await supabase
+  const { data } = await supabase
     .from('payment_transactions')
     .select('*, subscription_plans(*)')
     .eq('subscriber_id', subscriberId)
@@ -94,6 +103,7 @@ export async function getPendingPayment(subscriberId: string) {
     .limit(1)
     .single();
 
+  const transaction = data as (PaymentTransaction & { subscription_plans: SubscriptionPlan }) | null;
   return transaction;
 }
 
@@ -101,11 +111,13 @@ export async function getPendingPayment(subscriberId: string) {
  * Check if subscriber has active subscription
  */
 export async function hasActiveSubscription(subscriberId: string): Promise<boolean> {
-  const { data: subscriber } = await supabase
+  const { data } = await supabase
     .from('subscribers')
     .select('subscription_status, subscription_end_date')
     .eq('id', subscriberId)
     .single();
+
+  const subscriber = data as Pick<Subscriber, 'subscription_status' | 'subscription_end_date'> | null;
 
   if (!subscriber) return false;
 

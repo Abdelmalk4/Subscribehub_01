@@ -12,7 +12,7 @@ import {
   logReminderSent,
 } from '../services/subscription/index.js';
 import { safeSendMessage } from '../../shared/integrations/telegram.js';
-import { formatDate, daysUntil } from '../../shared/utils/date.js';
+import { formatDate } from '../../shared/utils/date.js';
 import { withFooter } from '../../shared/utils/format.js';
 
 export async function runReminderSender(): Promise<void> {
@@ -33,7 +33,9 @@ export async function runReminderSender(): Promise<void> {
           }
 
           // Send reminder
-          const bot = new Bot(sub.bot.botToken);
+          if (!sub.bot) continue;
+
+          const bot = new Bot(sub.bot.bot_token);
           const message = getReminderMessage(days, sub.subscriptionEndDate);
 
           const success = await safeSendMessage(

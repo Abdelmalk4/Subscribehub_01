@@ -3,7 +3,7 @@
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { supabase } from '../../../database/index.js';
+import { supabase, type Client, type SellingBot, type Subscriber } from '../../../database/index.js';
 import { createLogger } from '../../../shared/utils/logger.js';
 
 const logger = createLogger('api-clients');
@@ -12,12 +12,12 @@ export function registerClientRoutes(app: FastifyInstance): void {
   // Get all clients
   app.get('/clients', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { data: clients } = await supabase
+      const { data } = await supabase
         .from('clients')
         .select('*, selling_bots(count)')
         .order('created_at', { ascending: false });
 
-      return { clients };
+      return { clients: data };
     } catch (error) {
       logger.error({ error }, 'Failed to get clients');
       return reply.status(500).send({ error: 'Failed to get clients' });
@@ -27,17 +27,17 @@ export function registerClientRoutes(app: FastifyInstance): void {
   // Get client by ID
   app.get<{ Params: { id: string } }>('/clients/:id', async (request, reply) => {
     try {
-      const { data: client } = await supabase
+      const { data } = await supabase
         .from('clients')
         .select('*, selling_bots(*), subscription_plans(*)')
         .eq('id', request.params.id)
         .single();
 
-      if (!client) {
+      if (!data) {
         return reply.status(404).send({ error: 'Client not found' });
       }
 
-      return { client };
+      return { client: data };
     } catch (error) {
       logger.error({ error }, 'Failed to get client');
       return reply.status(500).send({ error: 'Failed to get client' });
@@ -47,14 +47,16 @@ export function registerClientRoutes(app: FastifyInstance): void {
   // Approve client
   app.post<{ Params: { id: string } }>('/clients/:id/approve', async (request, reply) => {
     try {
-      const { data: client, error } = await supabase
-        .from('clients')
+      const { data, error } = await (supabase
+        .from('clients') as any)
         .update({ status: 'PENDING' })
         .eq('id', request.params.id)
         .select()
         .single();
 
       if (error) throw error;
+
+      const client = data as Client;
 
       logger.info({ clientId: client.id }, 'Client approved');
       return { success: true, client };
@@ -69,13 +71,13 @@ export function registerClientRoutes(app: FastifyInstance): void {
     '/clients/:id/suspend',
     async (request, reply) => {
       try {
-        await supabase
-          .from('clients')
+        await (supabase
+          .from('clients') as any)
           .update({ status: 'SUSPENDED' })
           .eq('id', request.params.id);
 
-        await supabase
-          .from('selling_bots')
+        await (supabase
+          .from('selling_bots') as any)
           .update({ status: 'PAUSED' })
           .eq('client_id', request.params.id);
 
@@ -91,15 +93,15 @@ export function registerClientRoutes(app: FastifyInstance): void {
   // Get platform stats
   app.get('/stats', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const [clients, bots, subs] = await Promise.all([
+      const [clientsRes, botsRes, subsRes] = await Promise.all([
         supabase.from('clients').select('status'),
         supabase.from('selling_bots').select('status'),
         supabase.from('subscribers').select('subscription_status'),
       ]);
 
-      const clientData = clients.data || [];
-      const botData = bots.data || [];
-      const subData = subs.data || [];
+      const clientData = (clientsRes.data || []) as Array<Pick<Client, 'status'>>;
+      const botData = (botsRes.data || []) as Array<Pick<SellingBot, 'status'>>;
+      const subData = (subsRes.data || []) as Array<Pick<Subscriber, 'subscription_status'>>;
 
       return {
         clients: {

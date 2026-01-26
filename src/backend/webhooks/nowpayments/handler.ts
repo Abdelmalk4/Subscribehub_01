@@ -4,7 +4,7 @@
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { supabase } from '../../../database/index.js';
+import { supabase, type PaymentTransaction, type SubscriptionPlan, type Subscriber, type Client, type SellingBot } from '../../../database/index.js';
 import { validateWebhookSignature, mapPaymentStatus } from '../../../shared/integrations/nowpayments.js';
 import { webhookLogger as logger } from '../../../shared/utils/index.js';
 import { config } from '../../../shared/config/index.js';
@@ -54,7 +54,7 @@ export function registerWebhookRoutes(app: FastifyInstance) {
 
       try {
         // Find transaction by invoice ID with relations
-        const { data: transaction, error } = await supabase
+        const { data } = await supabase
           .from('payment_transactions')
           .select(`
             *,
@@ -68,8 +68,14 @@ export function registerWebhookRoutes(app: FastifyInstance) {
           .eq('nowpayments_invoice_id', String(payload.invoice_id))
           .single();
 
-        if (error || !transaction) {
-          logger.warn({ invoiceId: payload.invoice_id, error }, 'Transaction not found');
+        const transaction = data as (PaymentTransaction & { 
+          subscription_plans: SubscriptionPlan; 
+          subscribers: (Subscriber & { selling_bots: SellingBot }) | null;
+          clients: Client | null;
+        }) | null;
+
+        if (!transaction) {
+          logger.warn({ invoiceId: payload.invoice_id }, 'Transaction not found');
           return reply.status(200).send({ status: 'ignored', reason: 'transaction_not_found' });
         }
 
@@ -82,10 +88,10 @@ export function registerWebhookRoutes(app: FastifyInstance) {
         }
 
         // Update transaction
-        await supabase
-          .from('payment_transactions')
+        await (supabase
+          .from('payment_transactions') as any)
           .update({
-            payment_status: newStatus as any,
+            payment_status: newStatus,
             nowpayments_payment_id: String(payload.payment_id),
             payment_address: payload.pay_address,
             transaction_hash: payload.outcome_currency ? `${payload.outcome_amount} ${payload.outcome_currency}` : null,
@@ -131,8 +137,8 @@ async function handleConfirmedPayment(
     const endDate = addDays(startDate, plan.duration_days);
 
     // Update subscriber status
-    await supabase
-      .from('subscribers')
+    await (supabase
+      .from('subscribers') as any)
       .update({
         subscription_status: 'ACTIVE',
         subscription_start_date: startDate.toISOString(),
@@ -154,7 +160,7 @@ async function handleConfirmedPayment(
     }
 
     // Log access grant
-    await supabase.from('access_control_logs').insert({
+    await (supabase.from('access_control_logs') as any).insert({
       subscriber_id: subscriber.id,
       bot_id: bot.id,
       action: 'GRANT',
@@ -171,8 +177,8 @@ async function handleConfirmedPayment(
     const startDate = new Date();
     const endDate = addDays(startDate, plan.duration_days);
 
-    await supabase
-      .from('clients')
+    await (supabase
+      .from('clients') as any)
       .update({
         status: 'ACTIVE',
         platform_subscription_plan_id: plan.id,
@@ -182,8 +188,8 @@ async function handleConfirmedPayment(
       .eq('id', client.id);
 
     // Reactivate any paused bots
-    await supabase
-      .from('selling_bots')
+    await (supabase
+      .from('selling_bots') as any)
       .update({ status: 'ACTIVE' })
       .eq('client_id', client.id)
       .eq('status', 'PAUSED');

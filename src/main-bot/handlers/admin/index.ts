@@ -4,7 +4,7 @@
 
 import { Bot, InlineKeyboard } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
-import { supabase } from '../../../database/index.js';
+import { supabase, type Client, type SellingBot, type SubscriptionPlan, type Subscriber, type PaymentTransaction } from '../../../database/index.js';
 import { mainBotLogger as logger, withFooter, formatDate } from '../../../shared/utils/index.js';
 import { adminOnly } from '../../middleware/admin.js';
 
@@ -50,7 +50,7 @@ export function setupAdminHandlers(bot: Bot<MainBotContext>) {
 }
 
 async function showClientsList(ctx: MainBotContext) {
-  const { data: clients, error } = await supabase
+  const { data, error } = await supabase
     .from('clients')
     .select(`
       *,
@@ -58,6 +58,8 @@ async function showClientsList(ctx: MainBotContext) {
     `)
     .order('created_at', { ascending: false })
     .limit(10);
+
+  const clients = data as Array<Client & { selling_bots: Array<{ count: number }> }> | null;
 
   if (error || !clients || clients.length === 0) {
     await ctx.reply('📭 No clients registered yet.');
@@ -68,7 +70,7 @@ async function showClientsList(ctx: MainBotContext) {
 
   for (const client of clients) {
     const statusEmoji = getStatusEmoji(client.status);
-    const botCount = (client.selling_bots as any)?.[0]?.count || 0;
+    const botCount = client.selling_bots?.[0]?.count || 0;
     keyboard.text(
       `${statusEmoji} ${client.business_name} (${botCount} bots)`,
       `view_client:${client.id}`
@@ -87,11 +89,13 @@ async function showClientsList(ctx: MainBotContext) {
 }
 
 async function showPendingApprovals(ctx: MainBotContext) {
-  const { data: pending, error } = await supabase
+  const { data, error } = await supabase
     .from('clients')
     .select('*')
     .eq('status', 'PENDING')
     .order('created_at', { ascending: true });
+
+  const pending = data as Client[] | null;
 
   if (error || !pending || pending.length === 0) {
     const keyboard = new InlineKeyboard().text('« Back', 'start');
@@ -124,15 +128,15 @@ async function showPendingApprovals(ctx: MainBotContext) {
 
 async function showPlatformStats(ctx: MainBotContext) {
   const [
-    { count: totalClients },
-    { count: activeClients },
-    { count: trialClients },
-    { count: pendingClients },
-    { count: totalBots },
-    { count: activeBots },
-    { count: totalSubscribers },
-    { count: activeSubscribers },
-    { count: todayPayments },
+    totalClientsRes,
+    activeClientsRes,
+    trialClientsRes,
+    pendingClientsRes,
+    totalBotsRes,
+    activeBotsRes,
+    totalSubscribersRes,
+    activeSubscribersRes,
+    todayPaymentsRes,
   ] = await Promise.all([
     supabase.from('clients').select('*', { count: 'exact', head: true }),
     supabase.from('clients').select('*', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
@@ -146,6 +150,16 @@ async function showPlatformStats(ctx: MainBotContext) {
       .eq('payment_status', 'CONFIRMED')
       .gte('confirmed_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
   ]);
+
+  const totalClients = totalClientsRes.count;
+  const activeClients = activeClientsRes.count;
+  const trialClients = trialClientsRes.count;
+  const pendingClients = pendingClientsRes.count;
+  const totalBots = totalBotsRes.count;
+  const activeBots = activeBotsRes.count;
+  const totalSubscribers = totalSubscribersRes.count;
+  const activeSubscribers = activeSubscribersRes.count;
+  const todayPayments = todayPaymentsRes.count;
 
   const keyboard = new InlineKeyboard()
     .text('🔄 Refresh', 'admin_stats')
@@ -178,11 +192,13 @@ async function showPlatformStats(ctx: MainBotContext) {
 }
 
 async function showClientDetails(ctx: MainBotContext, clientId: string) {
-  const { data: client, error } = await supabase
+  const { data, error } = await supabase
     .from('clients')
     .select('*, selling_bots(id, bot_username, status), subscription_plans(*)')
     .eq('id', clientId)
     .single();
+
+  const client = data as (Client & { selling_bots: SellingBot[]; subscription_plans: SubscriptionPlan[] }) | null;
 
   if (error || !client) {
     await ctx.reply('❌ Client not found');
@@ -199,8 +215,8 @@ async function showClientDetails(ctx: MainBotContext, clientId: string) {
   }
   keyboard.row().text('« Back to Clients', 'admin_clients');
 
-  const botsInfo = client.selling_bots && (client.selling_bots as any[]).length > 0
-    ? (client.selling_bots as any[]).map((b) => `  • @${b.bot_username} (${b.status})`).join('\n')
+  const botsInfo = client.selling_bots && client.selling_bots.length > 0
+    ? client.selling_bots.map((b) => `  • @${b.bot_username} (${b.status})`).join('\n')
     : '  None';
 
   const message = `
@@ -217,7 +233,7 @@ ${client.trial_activated
     ? `Started: ${formatDate(new Date(client.trial_start_date!))}\nEnds: ${formatDate(new Date(client.trial_end_date!))}`
     : 'Not started'}
 
-*Selling Bots (${(client.selling_bots as any[])?.length || 0}):*
+*Selling Bots (${client.selling_bots?.length || 0}):*
 ${botsInfo}
 `;
 
@@ -229,12 +245,14 @@ ${botsInfo}
 
 async function approveClient(ctx: MainBotContext, clientId: string) {
   try {
-    const { data: client, error } = await supabase
-      .from('clients')
-      .update({ status: 'PENDING' })
+    const { data: clientData, error } = await (supabase
+      .from('clients') as any)
+      .update({ status: 'ACTIVE' }) // Changed from PENDING to ACTIVE for immediate use
       .eq('id', clientId)
       .select()
       .single();
+
+    const client = clientData as Client | null;
 
     if (error || !client) throw error || new Error('Client not found');
 
@@ -270,11 +288,13 @@ Use /start to begin.
 }
 
 async function showSuspendConfirm(ctx: MainBotContext, clientId: string) {
-  const { data: client } = await supabase
+  const { data } = await supabase
     .from('clients')
     .select('business_name')
     .eq('id', clientId)
     .single();
+
+  const client = data as Pick<Client, 'business_name'> | null;
 
   if (!client) {
     await ctx.reply('❌ Client not found');

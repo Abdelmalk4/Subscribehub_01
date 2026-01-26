@@ -4,7 +4,7 @@
  */
 
 import { Middleware } from 'grammy';
-import { supabase } from '../../database/index.js';
+import { supabase, type Client } from '../../database/index.js';
 import type { MainBotContext } from '../../shared/types/index.js';
 import { mainBotLogger as logger } from '../../shared/utils/index.js';
 
@@ -12,11 +12,13 @@ export function setupClientMiddleware(): Middleware<MainBotContext> {
   return async (ctx, next) => {
     if (ctx.from) {
       try {
-        const { data: client } = await supabase
+        const { data } = await supabase
           .from('clients')
           .select('*')
           .eq('telegram_user_id', ctx.from.id)
           .single();
+
+        const client = data as Client | null;
 
         if (client) {
           ctx.client = {

@@ -5,7 +5,7 @@
 
 import { Bot } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
-import { supabase } from '../../../database/index.js';
+import { supabase, type Subscriber } from '../../../database/index.js';
 import { sellingBotLogger as logger } from '../../../shared/utils/index.js';
 import { handleJoinRequest as performAccessControlCheck } from '../../../backend/services/access-control/index.js';
 
@@ -36,39 +36,45 @@ export function setupJoinRequestHandler(bot: Bot<SellingBotContext>) {
     }
 
     // Find subscriber
-    const { data: subscriber } = await supabase
-      .from('subscribers')
-      .select('id')
-      .eq('bot_id', botConfig.id)
-      .eq('telegram_user_id', userId)
-      .single();
+    try {
+      const { data } = await supabase
+        .from('subscribers')
+        .select('id')
+        .eq('bot_id', botConfig.id)
+        .eq('telegram_user_id', userId)
+        .single();
 
-    if (!subscriber) {
-      logger.info({ userId }, 'No subscriber record found');
-      // Decline and message user
-      try {
-        await ctx.api.declineChatJoinRequest(channelId, userId);
-        await ctx.api.sendMessage(
-          userId,
-          '❌ You need to subscribe first before joining the channel.\n\nUse /plans to view subscription options.'
-        );
-      } catch (e) {
-        logger.error({ error: e }, 'Failed to decline join request');
+      const subscriber = data as Pick<Subscriber, 'id'> | null;
+
+      if (!subscriber) {
+        logger.info({ userId }, 'No subscriber record found');
+        // Decline and message user
+        try {
+          await ctx.api.declineChatJoinRequest(channelId, userId);
+          await ctx.api.sendMessage(
+            userId,
+            '❌ You need to subscribe first before joining the channel.\n\nUse /plans to view subscription options.'
+          );
+        } catch (e) {
+          logger.error({ error: e }, 'Failed to decline join request');
+        }
+        return;
       }
-      return;
+
+      // Handle the join request using access control service
+      const result = await performAccessControlCheck(
+        subscriber.id,
+        userId,
+        channelId,
+        botConfig.botToken
+      );
+
+      logger.info(
+        { subscriberId: subscriber.id, result },
+        'Join request processed'
+      );
+    } catch (error) {
+      logger.error({ error, userId }, 'Error checking subscriber for join request');
     }
-
-    // Handle the join request using access control service
-    const result = await performAccessControlCheck(
-      subscriber.id,
-      userId,
-      channelId,
-      botConfig.botToken
-    );
-
-    logger.info(
-      { subscriberId: subscriber.id, result },
-      'Join request processed'
-    );
   });
 }

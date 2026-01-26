@@ -4,7 +4,7 @@
  */
 
 import { Bot } from 'grammy';
-import { supabase } from '../../../database/index.js';
+import { supabase, type Subscriber, type SellingBot } from '../../../database/index.js';
 import { accessLogger as logger } from '../../../shared/utils/index.js';
 import {
   createChannelInviteLink,
@@ -35,11 +35,13 @@ export async function grantChannelAccess(
     });
 
     // Get subscriber for end date
-    const { data: subscriber } = await supabase
+    const { data } = await supabase
       .from('subscribers')
       .select('subscription_end_date')
       .eq('id', subscriberId)
       .single();
+
+    const subscriber = data as Pick<Subscriber, 'subscription_end_date'> | null;
 
     // Send invite to subscriber
     const message = withFooter(`
@@ -102,7 +104,7 @@ Use /plans to view available options.
       });
 
       // Log revocation
-      await supabase.from('access_control_logs').insert({
+      await (supabase.from('access_control_logs') as any).insert({
         subscriber_id: subscriberId,
         bot_id: botId,
         action: 'REVOKE',
@@ -133,11 +135,13 @@ export async function handleJoinRequest(
     const bot = new Bot(botToken);
 
     // Check if subscriber has active subscription
-    const { data: subscriber } = await supabase
+    const { data } = await supabase
       .from('subscribers')
       .select('*, selling_bots(*)')
       .eq('id', subscriberId)
       .single();
+
+    const subscriber = data as (Subscriber & { selling_bots: SellingBot }) | null;
 
     if (!subscriber) {
       return 'error';
@@ -185,11 +189,13 @@ export async function manualExtendAccess(
   reason?: string
 ): Promise<boolean> {
   try {
-    const { data: subscriber } = await supabase
+    const { data } = await supabase
       .from('subscribers')
       .select('*, selling_bots(*)')
       .eq('id', subscriberId)
       .single();
+
+    const subscriber = data as (Subscriber & { selling_bots: SellingBot }) | null;
 
     if (!subscriber) return false;
 
@@ -201,8 +207,8 @@ export async function manualExtendAccess(
     newEndDate.setDate(newEndDate.getDate() + days);
 
     // Update subscriber
-    await supabase
-      .from('subscribers')
+    await (supabase
+      .from('subscribers') as any)
       .update({
         subscription_status: 'ACTIVE',
         subscription_end_date: newEndDate.toISOString(),
@@ -210,7 +216,7 @@ export async function manualExtendAccess(
       .eq('id', subscriberId);
 
     // Log action
-    await supabase.from('access_control_logs').insert({
+    await (supabase.from('access_control_logs') as any).insert({
       subscriber_id: subscriberId,
       bot_id: subscriber.bot_id,
       action: 'MANUAL_EXTEND',
@@ -237,22 +243,24 @@ export async function manualRevokeAccess(
   reason: string
 ): Promise<boolean> {
   try {
-    const { data: subscriber } = await supabase
+    const { data } = await supabase
       .from('subscribers')
       .select('*, selling_bots(*)')
       .eq('id', subscriberId)
       .single();
 
+    const subscriber = data as (Subscriber & { selling_bots: SellingBot }) | null;
+
     if (!subscriber || !subscriber.selling_bots) return false;
 
     // Update status
-    await supabase
-      .from('subscribers')
+    await (supabase
+      .from('subscribers') as any)
       .update({ subscription_status: 'REVOKED' })
       .eq('id', subscriberId);
 
     // Revoke channel access
-    const bot = subscriber.selling_bots as any;
+    const bot = subscriber.selling_bots;
     if (bot.linked_channel_id) {
       await revokeChannelAccess(
         subscriberId,
@@ -265,7 +273,7 @@ export async function manualRevokeAccess(
     }
 
     // Log action
-    await supabase.from('access_control_logs').insert({
+    await (supabase.from('access_control_logs') as any).insert({
       subscriber_id: subscriberId,
       bot_id: subscriber.bot_id,
       action: 'MANUAL_REVOKE',

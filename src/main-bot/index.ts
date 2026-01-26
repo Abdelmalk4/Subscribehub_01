@@ -19,10 +19,13 @@ import { setupHelpCommand } from './handlers/common/help.js';
 import { setupAdminHandlers } from './handlers/admin/index.js';
 import { setupMyBotsHandler } from './handlers/client/my-bots.js';
 import { setupSubscriptionHandler } from './handlers/client/subscription.js';
+import { setupSettingsHandler } from './handlers/client/settings.js';
+import { setupAnalyticsHandler } from './handlers/client/analytics.js';
 
 // Import conversations
 import { registrationConversation } from './handlers/client/registration.js';
 import { botCreationConversation } from './handlers/client/bot-creation.js';
+import { planCreationConversation } from './handlers/client/plan-creation.js';
 
 // =================================
 // Bot Initialization
@@ -49,6 +52,7 @@ mainBot.use(session({ initial: initialSession }));
 mainBot.use(conversations());
 mainBot.use(createConversation(registrationConversation));
 mainBot.use(createConversation(botCreationConversation));
+mainBot.use(createConversation(planCreationConversation));
 
 // =================================
 // Middleware
@@ -66,6 +70,8 @@ setupHelpCommand(mainBot);
 setupAdminHandlers(mainBot);
 setupMyBotsHandler(mainBot);
 setupSubscriptionHandler(mainBot);
+setupSettingsHandler(mainBot);
+setupAnalyticsHandler(mainBot);
 
 // Register callback
 mainBot.callbackQuery('register', async (ctx) => {

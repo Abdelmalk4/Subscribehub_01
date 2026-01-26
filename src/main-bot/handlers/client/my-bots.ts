@@ -49,6 +49,93 @@ export function setupMyBotsHandler(bot: Bot<MainBotContext>) {
     await ctx.answerCallbackQuery();
     await ctx.conversation.enter('botCreationConversation');
   });
+
+  // Create plan for a bot
+  bot.callbackQuery(/^create_plan:(.+)$/, clientOnly(), async (ctx) => {
+    const botId = ctx.match[1];
+    await ctx.answerCallbackQuery();
+    ctx.session.planCreation = { botId };
+    await ctx.conversation.enter('planCreationConversation');
+  });
+
+  // Link channel to bot
+  bot.callbackQuery(/^link_channel:(.+)$/, clientOnly(), async (ctx) => {
+    const botId = ctx.match[1];
+    await ctx.answerCallbackQuery();
+    ctx.session.linkingBotId = botId;
+
+    // Use KeyboardButtonRequestChat to let user select a channel
+    const { Keyboard } = await import('grammy');
+    const keyboard = new Keyboard()
+      .requestChat('📢 Select Channel', 1, {
+        chat_is_channel: true,
+        bot_is_member: true,
+      })
+      .placeholder('Select a channel to link')
+      .oneTime()
+      .resized();
+
+    await ctx.reply(withFooter(`
+📢 *Link Channel*
+
+Click the button below to select a channel.
+
+*Before linking:*
+1. Add your selling bot as an admin to the channel
+2. Give it permission to invite users
+
+_The channel picker will appear when you click the button._
+    `), {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  });
+
+  // Handle chat_shared event (when user selects a channel)
+  bot.on('message:chat_shared', async (ctx) => {
+    const linkingBotId = ctx.session.linkingBotId;
+    if (!linkingBotId) return;
+
+    const sharedChat = ctx.message.chat_shared;
+    const channelId = sharedChat.chat_id;
+
+    try {
+      // Get channel info
+      const chat = await ctx.api.getChat(channelId);
+      const channelUsername = 'username' in chat ? chat.username : null;
+      const channelTitle = 'title' in chat ? chat.title : 'Unknown';
+
+      // Update bot with linked channel
+      await (supabase.from('selling_bots') as any)
+        .update({
+          linked_channel_id: channelId,
+          linked_channel_username: channelUsername,
+        })
+        .eq('id', linkingBotId);
+
+      // Clear session
+      ctx.session.linkingBotId = undefined;
+
+      await ctx.reply(withFooter(`
+✅ *Channel Linked Successfully!*
+
+*Channel:* ${channelTitle}
+${channelUsername ? `*Username:* @${channelUsername}` : ''}
+
+Your selling bot will now manage access to this channel.
+      `), {
+        parse_mode: 'Markdown',
+        reply_markup: { remove_keyboard: true },
+      });
+
+      // Refresh bot details
+      await showBotDetails(ctx, linkingBotId);
+    } catch (error) {
+      await ctx.reply('❌ Failed to link channel. Make sure your selling bot is an admin in the channel.', {
+        reply_markup: { remove_keyboard: true },
+      });
+    }
+  });
 }
 
 async function showMyBots(ctx: MainBotContext) {
@@ -133,6 +220,9 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
   const keyboard = new InlineKeyboard()
     .text('👥 Subscribers', `bot_subscribers:${bot.id}`)
     .text('📋 Plans', `bot_plans:${bot.id}`)
+    .row()
+    .text('📢 Link Channel', `link_channel:${bot.id}`)
+    .text('➕ Add Plan', `create_plan:${bot.id}`)
     .row()
     .text(
       bot.status === 'ACTIVE' ? '⏸️ Pause Bot' : '▶️ Activate Bot',

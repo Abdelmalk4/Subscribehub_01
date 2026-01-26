@@ -27,6 +27,73 @@ export function setupAdminHandlers(bot: Bot<MainBotContext>) {
     await showPlatformStats(ctx);
   });
 
+  // Platform settings
+  bot.callbackQuery('admin_settings', adminOnly(), async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const keyboard = new InlineKeyboard()
+      .text('📋 Manage Platform Plans', 'admin_manage_plans')
+      .row()
+      .text('🔔 IPN Settings', 'admin_ipn_settings')
+      .row()
+      .text('« Back', 'start');
+
+    await ctx.reply(withFooter(`
+⚙️ *Platform Settings*
+
+Configure your TeleTrade platform.
+
+• *Platform Plans* - Manage subscription plans for clients
+• *IPN Settings* - NOWPayments webhook configuration
+    `), { parse_mode: 'Markdown', reply_markup: keyboard });
+  });
+
+  // Admin search client
+  bot.callbackQuery('admin_search', adminOnly(), async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.reply(withFooter(`
+🔍 *Search Client*
+
+Send the client's username or business name to search.
+
+_Example: @username or "Premium Signals"_
+    `), { parse_mode: 'Markdown' });
+  });
+
+  // Handle text messages for admin search
+  bot.on('message:text', adminOnly(), async (ctx, next) => {
+    // Check if this might be a search query (admin context)
+    if (ctx.isAdmin && ctx.message.text && !ctx.message.text.startsWith('/')) {
+      const searchTerm = ctx.message.text.trim().replace(/^@/, '');
+      
+      // Try to find matching clients
+      const { data } = await supabase
+        .from('clients')
+        .select('id, business_name, username, status')
+        .or(`business_name.ilike.%${searchTerm}%,username.ilike.%${searchTerm}%`)
+        .limit(5);
+
+      const results = data as Array<Pick<Client, 'id' | 'business_name' | 'username' | 'status'>> | null;
+
+      if (results && results.length > 0) {
+        const keyboard = new InlineKeyboard();
+        for (const client of results) {
+          keyboard.text(
+            `${getStatusEmoji(client.status)} ${client.business_name}`,
+            `view_client:${client.id}`
+          ).row();
+        }
+        keyboard.text('« Back', 'start');
+
+        await ctx.reply(`🔍 *Search Results*\n\nFound ${results.length} client(s):`, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard,
+        });
+        return;
+      }
+    }
+    await next();
+  });
+
   // Approve client
   bot.callbackQuery(/^approve_client:(.+)$/, adminOnly(), async (ctx) => {
     const clientId = ctx.match[1];

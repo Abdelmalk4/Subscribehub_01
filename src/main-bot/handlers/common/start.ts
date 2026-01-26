@@ -28,6 +28,44 @@ export function setupStartCommand(bot: Bot<MainBotContext>) {
     // New user - show welcome and registration
     return showWelcome(ctx, firstName);
   });
+
+  // Back button handler - used across all menus
+  bot.callbackQuery('start', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const firstName = ctx.from?.first_name || 'there';
+
+    if (ctx.isAdmin) {
+      return showAdminDashboard(ctx, firstName);
+    }
+    if (ctx.client) {
+      return showClientDashboard(ctx, firstName);
+    }
+    return showWelcome(ctx, firstName);
+  });
+
+  // Learn more handler
+  bot.callbackQuery('learn_more', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const keyboard = new InlineKeyboard()
+      .text('🚀 Register Now', 'register')
+      .row()
+      .text('« Back', 'start');
+
+    await ctx.reply(withFooter(`
+📖 *About ${PLATFORM.NAME}*
+
+We help Telegram channel owners monetize their content with automatic subscription management.
+
+*Features:*
+• Create white-label subscription bots
+• Accept crypto payments via NOWPayments
+• Automatic channel access control
+• Real-time analytics
+• 7-day free trial
+
+Ready to start? Click "Register Now" below!
+    `), { parse_mode: 'Markdown', reply_markup: keyboard });
+  });
 }
 
 async function showWelcome(ctx: MainBotContext, firstName: string) {

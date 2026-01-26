@@ -30,7 +30,7 @@ export interface MainBotSessionData {
   };
   // Plan creation flow
   planCreation?: {
-    step: 'name' | 'price' | 'currency' | 'duration' | 'description' | 'confirm';
+    step?: 'name' | 'price' | 'currency' | 'duration' | 'description' | 'confirm';
     name?: string;
     priceAmount?: number;
     priceCurrency?: string;
@@ -38,6 +38,8 @@ export interface MainBotSessionData {
     description?: string;
     botId?: string;
   };
+  // Channel linking
+  linkingBotId?: string;
 }
 
 export interface SellingBotSessionData {

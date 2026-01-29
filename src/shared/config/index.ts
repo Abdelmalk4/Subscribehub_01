@@ -28,8 +28,13 @@ const envSchema = z.object({
 
   // NOWPayments
   NOWPAYMENTS_IPN_CALLBACK_URL: z.string().url().optional(),
-  NOWPAYMENTS_IPN_SECRET: z.string().optional(),
+  NOWPAYMENTS_IPN_SECRET: z.string().min(1),
   NOWPAYMENTS_API_KEY: z.string().optional(),
+
+  // Security
+  ADMIN_API_KEY: z.string().min(1),
+  ENCRYPTION_KEY: z.string().length(64).regex(/^[0-9a-f]+$/), // 32 bytes in hex
+  ALLOWED_ORIGINS: z.string().default('*').transform(val => val.split(',')),
 
   // Platform
   PLATFORM_NAME: z.string().default('TeleTrade'),

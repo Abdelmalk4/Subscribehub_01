@@ -17,6 +17,11 @@ import { startScheduledJobs } from './jobs/index.js';
 
 const logger = createLogger('backend');
 
+
+// Import auth middleware
+import { authenticateApi } from './middleware/api-auth.js';
+import { supabase } from '../database/index.js';
+
 // Create Fastify instance
 const app = Fastify({
   logger: isDevelopment,
@@ -24,14 +29,35 @@ const app = Fastify({
 
 // Middleware
 await app.register(cors, {
-  origin: true,
+   origin: config.ALLOWED_ORIGINS,
+   credentials: true,
+   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 });
 
+// Register global auth hook
+app.addHook('onRequest', authenticateApi);
+
 // Health check
-app.get('/health', async () => ({
-  status: 'ok',
-  timestamp: new Date().toISOString(),
-}));
+app.get('/health', async (request, reply) => {
+  try {
+    // Check DB connection
+    const { error } = await supabase.from('clients').select('id').limit(1);
+    if (error) throw error;
+    
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      database: 'connected'
+    };
+  } catch (error) {
+    logger.error({ error }, 'Health check failed');
+    return reply.status(503).send({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      database: 'disconnected'
+    });
+  }
+});
 
 // Register routes
 registerWebhookRoutes(app);

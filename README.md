@@ -8,7 +8,13 @@ TeleTrade enables Telegram trading signal channel owners to automate subscriber
 management, payment processing, and access control through cryptocurrency
 payments.
 
-### Architecture
+- **Multitenancy**: Clients can run multiple selling bots (managed via database)
+- **7-day free trial**: Automatic trial activation on first bot creation
+- **Automated access control**: Grant/revoke channel access based on
+  subscription
+- **White-label branding**: Customizable messages with mandatory platform footer
+
+## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐
@@ -24,6 +30,11 @@ payments.
               └──────┬──────┘
                      │
               ┌──────┴──────┐
+              │   Backend   │
+              │  (Fastify)  │
+              └──────┬──────┘
+                     │
+              ┌──────┴──────┐
               │ NOWPayments │
               │   Webhooks  │
               └─────────────┘
@@ -34,7 +45,8 @@ payments.
 - **Runtime**: Node.js 20+
 - **Language**: TypeScript
 - **Bot Framework**: grammY
-- **Database**: Supabase (PostgreSQL + Prisma)
+- **Server Framework**: Fastify
+- **Database**: Supabase (PostgreSQL)
 - **Payments**: NOWPayments (crypto)
 - **Hosting**: Railway.com
 
@@ -63,11 +75,14 @@ npm run db:push
 ### 4. Run Development
 
 ```bash
-# Start Main Bot
+# Terminal 1: Start Main Bot
 npm run dev:main-bot
 
-# Start Selling Bots (separate terminal)
+# Terminal 2: Start Selling Bots
 npm run dev:selling-bot
+
+# Terminal 3: Start Backend (Webhooks & Jobs)
+npm run dev:backend
 ```
 
 ## Project Structure
@@ -84,6 +99,12 @@ src/
 │   ├── middleware/     # Bot config, subscriber loading
 │   └── index.ts        # Entry point + bot factory
 │
+├── backend/            # Backend API & Jobs
+│   ├── api/            # API routes
+│   ├── jobs/           # Scheduled tasks (cron)
+│   ├── webhooks/       # Payment callbacks
+│   └── index.ts        # Entry point
+│
 ├── database/           # Prisma client
 ├── shared/             # Shared utilities
 │   ├── config/         # Environment config
@@ -91,17 +112,12 @@ src/
 │   ├── utils/          # Helpers (logger, date, format)
 │   └── integrations/   # NOWPayments, Telegram utils
 │
-└── prisma/             # Database schema
+└── 
 ```
 
 ## Key Features
 
-- **Non-custodial payments**: Client's funds go directly to their wallet
-- **Multi-bot support**: Clients can run multiple selling bots
-- **7-day free trial**: Automatic trial activation on first bot creation
-- **Automated access control**: Grant/revoke channel access based on
-  subscription
-- **White-label branding**: Customizable messages with mandatory platform footer
+- **Non-custodial payments**: Clients' funds go directly to their wallet
 
 ## Environment Variables
 

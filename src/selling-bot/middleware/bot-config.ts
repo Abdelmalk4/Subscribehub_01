@@ -5,7 +5,7 @@
 
 import { Middleware } from 'grammy';
 import { supabase, type SellingBot, type Client } from '../../database/index.js';
-import { sellingBotLogger as logger } from '../../shared/utils/index.js';
+import { sellingBotLogger as logger, decrypt } from '../../shared/utils/index.js';
 import type { SellingBotContext, SellingBotConfig } from '../../shared/types/index.js';
 
 export function setupBotConfigMiddleware(botId: string): Middleware<SellingBotContext> {
@@ -50,10 +50,10 @@ export function setupBotConfigMiddleware(botId: string): Middleware<SellingBotCo
       ctx.botConfig = {
         id: botConfig.id,
         clientId: botConfig.client_id,
-        botToken: botConfig.bot_token,
+        botToken: decrypt(botConfig.bot_token), // Decrypt token
         botUsername: botConfig.bot_username || '',
         botName: botConfig.bot_name ?? undefined,
-        nowpaymentsApiKey: botConfig.nowpayments_api_key,
+        nowpaymentsApiKey: decrypt(botConfig.nowpayments_api_key), // Decrypt API key
         cryptoWalletAddress: botConfig.crypto_wallet_address,
         linkedChannelId: botConfig.linked_channel_id
           ? BigInt(botConfig.linked_channel_id)

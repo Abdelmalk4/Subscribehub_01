@@ -36,174 +36,86 @@ export function registerWebhookRoutes(app: FastifyInstance) {
 
       logger.info({ invoiceId: request.body.invoice_id }, 'Received NOWPayments webhook');
 
-      // Validate signature
-      if (config.NOWPAYMENTS_IPN_SECRET) {
-        const isValid = validateWebhookSignature(
-          rawBody,
-          signature || '',
-          config.NOWPAYMENTS_IPN_SECRET
-        );
+      // Mandatory Signature Validation
+      if (!config.NOWPAYMENTS_IPN_SECRET) {
+         logger.fatal('Missing NOWPAYMENTS_IPN_SECRET configuration');
+         return reply.status(500).send({ error: 'System configuration error' });
+      }
 
-        if (!isValid) {
-          logger.warn({ invoiceId: request.body.invoice_id }, 'Invalid webhook signature');
-          return reply.status(403).send({ error: 'Invalid signature' });
-        }
+      const isValid = validateWebhookSignature(
+        rawBody,
+        signature || '',
+        config.NOWPAYMENTS_IPN_SECRET
+      );
+
+      if (!isValid) {
+        logger.warn({ invoiceId: request.body.invoice_id }, 'Invalid webhook signature');
+        return reply.status(403).send({ error: 'Invalid signature' });
       }
 
       const payload = request.body;
 
       try {
-        // Find transaction by invoice ID with relations
-        const { data } = await supabase
-          .from('payment_transactions')
-          .select(`
-            *,
-            subscription_plans(*),
-            subscribers(
-              *,
-              selling_bots(*)
-            ),
-            clients(*)
-          `)
-          .eq('nowpayments_invoice_id', String(payload.invoice_id))
-          .single();
+        // Atomic Processing via RPC
+        const { data: result, error } = await supabase.rpc('process_payment_webhook', {
+          p_invoice_id: String(payload.invoice_id),
+          p_payment_status: payload.payment_status,
+          p_actually_paid: payload.actually_paid || 0,
+          p_pay_currency: payload.pay_currency
+        });
 
-        const transaction = data as (PaymentTransaction & { 
-          subscription_plans: SubscriptionPlan; 
-          subscribers: (Subscriber & { selling_bots: SellingBot }) | null;
-          clients: Client | null;
-        }) | null;
-
-        if (!transaction) {
-          logger.warn({ invoiceId: payload.invoice_id }, 'Transaction not found');
-          return reply.status(200).send({ status: 'ignored', reason: 'transaction_not_found' });
+        if (error) {
+          logger.error({ error, invoiceId: payload.invoice_id }, 'RPC failed');
+          return reply.status(500).send({ error: 'Processing failed' });
         }
 
-        const newStatus = mapPaymentStatus(payload.payment_status);
+        const response = result as any;
 
-        // Idempotency check - don't reprocess same status
-        if (transaction.payment_status === newStatus) {
-          logger.debug({ invoiceId: payload.invoice_id, status: newStatus }, 'Duplicate webhook ignored');
-          return reply.status(200).send({ status: 'duplicate' });
+        if (response.status === 'success' && response.action === 'activated_subscriber') {
+             // Access granting can remain here as side-effect, but state is already safe
+             await triggerPostPaymentActions(payload.invoice_id);
         }
 
-        // Update transaction
-        await (supabase
-          .from('payment_transactions') as any)
-          .update({
-            payment_status: newStatus,
-            nowpayments_payment_id: String(payload.payment_id),
-            payment_address: payload.pay_address,
-            transaction_hash: payload.outcome_currency ? `${payload.outcome_amount} ${payload.outcome_currency}` : null,
-            confirmed_at: newStatus === 'CONFIRMED' ? new Date().toISOString() : undefined,
-          })
-          .eq('id', transaction.id);
+        logger.info({ invoiceId: payload.invoice_id, result: response }, 'Webhook processed');
+        return reply.status(200).send({ status: 'processed', detail: response });
 
-        logger.info(
-          { transactionId: transaction.id, oldStatus: transaction.payment_status, newStatus },
-          'Transaction status updated'
-        );
-
-        // Handle confirmed payments
-        if (newStatus === 'CONFIRMED') {
-          await handleConfirmedPayment(transaction, payload);
-        }
-
-        // Handle failed/expired payments
-        if (newStatus === 'FAILED' || newStatus === 'EXPIRED') {
-          await handleFailedPayment(transaction);
-        }
-
-        return reply.status(200).send({ status: 'processed' });
       } catch (error) {
-        logger.error({ error, invoiceId: payload.invoice_id }, 'Failed to process webhook');
+        logger.error({ error, invoiceId: payload.invoice_id }, 'Failed to process payment');
         return reply.status(500).send({ error: 'Processing failed' });
       }
     }
   );
 }
 
-async function handleConfirmedPayment(
-  transaction: any,
-  payload: WebhookBody
-) {
-  const paymentType = transaction.payment_type;
-  const subscriber = transaction.subscribers;
-  const client = transaction.clients;
-  const plan = transaction.subscription_plans;
+// Side-effects handler: Access Granting (Idempotent-ish check)
+async function triggerPostPaymentActions(invoiceId: number) {
+    const { data: transaction } = await supabase
+        .from('payment_transactions')
+        .select(`*, subscribers(*, selling_bots(*))`)
+        .eq('nowpayments_invoice_id', String(invoiceId))
+        .single();
+    
+    if (!transaction || !transaction.subscribers || !transaction.subscribers.selling_bots) return;
 
-  if (paymentType === 'SUBSCRIBER_SUBSCRIPTION' && subscriber) {
-    const startDate = new Date();
-    const endDate = addDays(startDate, plan.duration_days);
+    const sub = transaction.subscribers;
+    const bot = sub.selling_bots;
 
-    // Update subscriber status
-    await (supabase
-      .from('subscribers') as any)
-      .update({
-        subscription_status: 'ACTIVE',
-        subscription_start_date: startDate.toISOString(),
-        subscription_end_date: endDate.toISOString(),
-        subscription_plan_id: plan.id,
-      })
-      .eq('id', subscriber.id);
-
-    // Grant channel access
-    const bot = subscriber.selling_bots;
-    if (bot?.linked_channel_id) {
-      await grantChannelAccess(
-        subscriber.id,
-        bot.id,
-        Number(subscriber.telegram_user_id),
-        Number(bot.linked_channel_id),
-        bot.bot_token
-      );
+    // Decrypt Token for use
+    let botToken = bot.bot_token;
+    if (botToken.includes(':')) { // simple check if encrypted
+         // Dynamic Import to avoid circular dependencies if any
+         const { decrypt } = await import('../../../shared/utils/encryption.js');
+         try { botToken = decrypt(botToken); } catch {}
     }
 
-    // Log access grant
-    await (supabase.from('access_control_logs') as any).insert({
-      subscriber_id: subscriber.id,
-      bot_id: bot.id,
-      action: 'GRANT',
-      performed_by: 'SYSTEM',
-      reason: `Payment confirmed: ${payload.actually_paid} ${payload.pay_currency}`,
-    });
-
-    logger.info(
-      { subscriberId: subscriber.id, planId: plan.id, endDate },
-      'Subscriber subscription activated'
-    );
-
-  } else if (paymentType === 'PLATFORM_SUBSCRIPTION' && client) {
-    const startDate = new Date();
-    const endDate = addDays(startDate, plan.duration_days);
-
-    await (supabase
-      .from('clients') as any)
-      .update({
-        status: 'ACTIVE',
-        platform_subscription_plan_id: plan.id,
-        platform_subscription_start: startDate.toISOString(),
-        platform_subscription_end: endDate.toISOString(),
-      })
-      .eq('id', client.id);
-
-    // Reactivate any paused bots
-    await (supabase
-      .from('selling_bots') as any)
-      .update({ status: 'ACTIVE' })
-      .eq('client_id', client.id)
-      .eq('status', 'PAUSED');
-
-    logger.info(
-      { clientId: client.id, planId: plan.id, endDate },
-      'Client platform subscription activated'
-    );
-  }
+    if (bot.linked_channel_id) {
+       await grantChannelAccess(
+         sub.id,
+         bot.id,
+         Number(sub.telegram_user_id),
+         Number(bot.linked_channel_id),
+         botToken
+       );
+    }
 }
 
-async function handleFailedPayment(transaction: any) {
-  logger.info(
-    { transactionId: transaction.id, type: transaction.payment_type },
-    'Payment failed or expired'
-  );
-}

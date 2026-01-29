@@ -6,7 +6,7 @@
 import { InlineKeyboard, Bot } from 'grammy';
 import type { MainBotConversation, MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type SellingBot } from '../../../database/index.js';
-import { mainBotLogger as logger, addDays, withFooter } from '../../../shared/utils/index.js';
+import { mainBotLogger as logger, addDays, withFooter, encrypt } from '../../../shared/utils/index.js';
 import { PLATFORM } from '../../../shared/config/index.js';
 
 export async function botCreationConversation(
@@ -133,10 +133,10 @@ export async function botCreationConversation(
       .from('selling_bots') as any)
       .insert({
         client_id: client.id,
-        bot_token: botToken,
+        bot_token: encrypt(botToken), // Encrypt token
         bot_username: botUsername,
         bot_name: botName,
-        nowpayments_api_key: nowpaymentsApiKey,
+        nowpayments_api_key: encrypt(nowpaymentsApiKey), // Encrypt API key
         crypto_wallet_address: cryptoWalletAddress,
         status: 'ACTIVE',
       })

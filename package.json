@@ -19,30 +19,32 @@
         "test:watch": "vitest"
     },
     "dependencies": {
-        "@supabase/supabase-js": "^2.39.0",
-        "grammy": "^1.21.0",
+        "@fastify/cors": "^9.0.0",
         "@grammyjs/conversations": "^1.2.0",
         "@grammyjs/menu": "^1.2.1",
         "@grammyjs/runner": "^2.0.3",
-        "fastify": "^4.26.0",
-        "@fastify/cors": "^9.0.0",
+        "@supabase/supabase-js": "^2.39.0",
         "dotenv": "^16.4.0",
-        "zod": "^3.22.0",
+        "fastify": "^4.26.0",
+        "grammy": "^1.21.0",
+        "ky": "^1.2.0",
+        "node-cron": "^3.0.3",
         "pino": "^8.18.0",
         "pino-pretty": "^10.3.0",
-        "node-cron": "^3.0.3",
-        "ky": "^1.2.0"
+        "zod": "^3.22.0"
     },
     "devDependencies": {
         "@types/node": "^20.11.0",
         "@types/node-cron": "^3.0.11",
-        "typescript": "^5.3.0",
-        "tsx": "^4.7.0",
-        "eslint": "^8.56.0",
+        "@types/pg": "^8.16.0",
         "@typescript-eslint/eslint-plugin": "^6.21.0",
         "@typescript-eslint/parser": "^6.21.0",
-        "vitest": "^1.2.0",
-        "concurrently": "^8.2.0"
+        "concurrently": "^8.2.0",
+        "eslint": "^8.56.0",
+        "pg": "^8.17.2",
+        "tsx": "^4.7.0",
+        "typescript": "^5.3.0",
+        "vitest": "^1.2.0"
     },
     "engines": {
         "node": ">=20.0.0"

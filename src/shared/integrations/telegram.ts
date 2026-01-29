@@ -9,6 +9,51 @@ import { createLogger } from '../utils/logger.js';
 const logger = createLogger('telegram');
 
 /**
+ * Retry interaction with Telegram API
+ * @param operation Function to execute
+ * @param retries Max retries (default 3)
+ * @param delayMs Base delay in ms (default 1000)
+ */
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  retries = 3,
+  delayMs = 1000
+): Promise<T> {
+  let lastError: any;
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+      
+      const errorCode = error?.error_code || error?.response?.error_code;
+      const description = error?.description || error?.response?.description;
+      
+      // Don't retry client errors (except rate limits)
+      if (errorCode >= 400 && errorCode < 500 && errorCode !== 429) {
+          throw error;
+      }
+      
+      // Rate Limit Handling
+      if (errorCode === 429) {
+          const retryAfter = error?.parameters?.retry_after || 1;
+          logger.warn({ retryAfter }, 'Rate limited by Telegram, waiting...');
+          await new Promise(resolve => setTimeout(resolve, (retryAfter * 1000) + 100)); // +100ms buffer
+          continue;
+      }
+
+      logger.warn({ attempt: i + 1, error: description }, 'Telegram API failed, retrying...');
+      
+      // Exponential Backoff
+      await new Promise(resolve => setTimeout(resolve, delayMs * Math.pow(2, i)));
+    }
+  }
+  
+  throw lastError;
+}
+
+/**
  * Create a chat invite link for a channel
  */
 export async function createChannelInviteLink(
@@ -21,11 +66,11 @@ export async function createChannelInviteLink(
   }
 ): Promise<string> {
   try {
-    const invite = await bot.api.createChatInviteLink(channelId, {
+    const invite = await withRetry(() => bot.api.createChatInviteLink(channelId, {
       name: options?.name || 'Subscription access',
       expire_date: options?.expireDate,
       member_limit: options?.memberLimit || 1,
-    });
+    }));
     return invite.invite_link;
   } catch (error) {
     logger.error({ error, channelId }, 'Failed to create invite link');
@@ -42,12 +87,15 @@ export async function removeUserFromChannel(
   userId: number
 ): Promise<boolean> {
   try {
-    await bot.api.banChatMember(channelId, userId, {
-      until_date: Math.floor(Date.now() / 1000) + 60, // Ban for 1 minute then auto-unban
-      revoke_messages: false,
+    await withRetry(async () => {
+       await bot.api.banChatMember(channelId, userId, {
+             until_date: Math.floor(Date.now() / 1000) + 60, // Ban for 1 minute then auto-unban
+             revoke_messages: false,
+       });
+       // Immediately unban so they can rejoin if they resubscribe
+       await bot.api.unbanChatMember(channelId, userId);
     });
-    // Immediately unban so they can rejoin if they resubscribe
-    await bot.api.unbanChatMember(channelId, userId);
+
     return true;
   } catch (error) {
     logger.error({ error, channelId, userId }, 'Failed to remove user from channel');
@@ -64,7 +112,7 @@ export async function approveJoinRequest(
   userId: number
 ): Promise<boolean> {
   try {
-    await bot.api.approveChatJoinRequest(channelId, userId);
+    await withRetry(() => bot.api.approveChatJoinRequest(channelId, userId));
     return true;
   } catch (error) {
     logger.error({ error, channelId, userId }, 'Failed to approve join request');
@@ -81,7 +129,7 @@ export async function declineJoinRequest(
   userId: number
 ): Promise<boolean> {
   try {
-    await bot.api.declineChatJoinRequest(channelId, userId);
+    await withRetry(() => bot.api.declineChatJoinRequest(channelId, userId));
     return true;
   } catch (error) {
     logger.error({ error, channelId, userId }, 'Failed to decline join request');
@@ -97,8 +145,8 @@ export async function isBotChannelAdmin(
   channelId: number | string
 ): Promise<boolean> {
   try {
-    const me = await bot.api.getMe();
-    const member = await bot.api.getChatMember(channelId, me.id);
+    const me = await withRetry(() => bot.api.getMe());
+    const member = await withRetry(() => bot.api.getChatMember(channelId, me.id));
     return member.status === 'administrator' || member.status === 'creator';
   } catch (error) {
     logger.error({ error, channelId }, 'Failed to check bot admin status');
@@ -114,7 +162,7 @@ export async function getChannelInfo(
   channelId: number | string
 ): Promise<{ id: number; title: string; username?: string } | null> {
   try {
-    const chat = await bot.api.getChat(channelId);
+    const chat = await withRetry(() => bot.api.getChat(channelId));
     if (chat.type === 'channel' || chat.type === 'supergroup') {
       return {
         id: chat.id,
@@ -162,10 +210,10 @@ export async function safeSendMessage(
   }
 ): Promise<boolean> {
   try {
-    await bot.api.sendMessage(chatId, text, {
+    await withRetry(() => bot.api.sendMessage(chatId, text, {
       parse_mode: options?.parse_mode || 'Markdown',
       reply_markup: options?.reply_markup,
-    });
+    }));
     return true;
   } catch (error) {
     logger.error({ error, chatId }, 'Failed to send message');

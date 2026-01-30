@@ -5,7 +5,7 @@
 import { Bot, InlineKeyboard, Keyboard } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type SellingBot, type Subscriber, type SubscriptionPlan } from '../../../database/index.js';
-import { withFooter, formatDate, formatPrice, formatDuration, decrypt } from '../../../shared/utils/index.js';
+import { withFooter, formatDate, formatPrice, formatDuration, decrypt, escapeMarkdown } from '../../../shared/utils/index.js';
 import { mainBotLogger as logger } from '../../../shared/utils/index.js';
 import { clientOnly } from '../../middleware/client.js';
 
@@ -362,10 +362,10 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
       : '❌ Not linked';
 
   const message = `
-🤖 *Bot: @${bot.bot_username}*
+🤖 *Bot: @${escapeMarkdown(bot.bot_username)}*
 
 *Status:* ${bot.status === 'ACTIVE' ? '🟢 Active' : '🔴 Paused'}
-*Name:* ${bot.bot_name || 'Not set'}
+*Name:* ${escapeMarkdown(bot.bot_name || 'Not set')}
 
 *Statistics:*
 • Total Subscribers: ${subscriberCount}
@@ -374,7 +374,7 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
 
 *Linked Channel/Group:* ${linkedInfo}
 
-*Share Link:* t.me/${bot.bot_username}
+*Share Link:* t.me/${escapeMarkdown(bot.bot_username)}
 `;
 
   await ctx.reply(withFooter(message), {
@@ -413,7 +413,7 @@ async function showBotSubscribers(ctx: MainBotContext, botId: string) {
 
   for (const sub of subscribers) {
     const statusEmoji = sub.subscription_status === 'ACTIVE' ? '✅' : '❌';
-    const username = sub.username ? `@${sub.username}` : sub.first_name || 'Unknown';
+    const username = sub.username ? `@${escapeMarkdown(sub.username)}` : escapeMarkdown(sub.first_name || 'Unknown');
     const plan = sub.subscription_plans?.name || 'N/A';
     const expiry = sub.subscription_end_date ? formatDate(new Date(sub.subscription_end_date)) : 'N/A';
 

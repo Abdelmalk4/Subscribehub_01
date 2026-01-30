@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS bot_sessions (
 );
 
 -- Index for faster lookups and cleanup
-CREATE INDEX idx_bot_sessions_updated ON bot_sessions(updated_at);
+CREATE INDEX IF NOT EXISTS idx_bot_sessions_updated ON bot_sessions(updated_at);
 
 -- Auto-update timestamp trigger
 CREATE TRIGGER update_bot_sessions_updated_at

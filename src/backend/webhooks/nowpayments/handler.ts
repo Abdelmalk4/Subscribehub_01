@@ -10,6 +10,9 @@ import { webhookLogger as logger } from '../../../shared/utils/index.js';
 import { config } from '../../../shared/config/index.js';
 import { grantChannelAccess } from '../../services/access-control/index.js';
 import { addDays } from '../../../shared/utils/date.js';
+import { Bot } from 'grammy';
+import { safeSendMessage } from '../../../shared/integrations/telegram.js';
+import { PLATFORM } from '../../../shared/config/index.js';
 
 interface WebhookBody {
   payment_id: number;
@@ -104,40 +107,64 @@ export function registerWebhookRoutes(app: FastifyInstance) {
 }
 
 // Side-effects handler: Access Granting (Idempotent-ish check)
+// Side-effects handler: Access Granting & Notifications
 async function triggerPostPaymentActions(invoiceId: number) {
     const { data: transaction } = await supabase
         .from('payment_transactions')
-        .select(`*, subscribers(*, selling_bots(*))`)
+        .select(`*, subscribers(*, selling_bots(*)), clients(*)`)
         .eq('nowpayments_invoice_id', String(invoiceId))
         .single();
     
-    // Explicitly check for null transaction or missing relations
-    // Type casting to bypass 'never' inference on complex joins without generated types
+    // Explicitly check for null transaction
     if (!transaction) return;
 
     // Use safe access with optional chaining and manual casting if needed
     const tx = transaction as any;
-    if (!tx.subscribers || !tx.subscribers.selling_bots) return;
 
-    const sub = tx.subscribers;
-    const bot = sub.selling_bots;
+    // Case 1: Subscriber Payment (Grant Access)
+    if (tx.subscribers && tx.subscribers.selling_bots) {
+        const sub = tx.subscribers;
+        const bot = sub.selling_bots;
 
-    // Decrypt Token for use
-    let botToken = bot.bot_token;
-    if (botToken.includes(':')) { // simple check if encrypted
-         // Dynamic Import to avoid circular dependencies if any
-         const { decrypt } = await import('../../../shared/utils/encryption.js');
-         try { botToken = decrypt(botToken); } catch {}
+        // Decrypt Token for use
+        let botToken = bot.bot_token;
+        if (botToken.includes(':')) { // simple check if encrypted
+             // Dynamic Import to avoid circular dependencies if any
+             const { decrypt } = await import('../../../shared/utils/encryption.js');
+             try { botToken = decrypt(botToken); } catch {}
+        }
+
+        if (bot.linked_channel_id) {
+           await grantChannelAccess(
+             sub.id,
+             bot.id,
+             Number(sub.telegram_user_id),
+             Number(bot.linked_channel_id),
+             botToken
+           );
+        }
     }
 
-    if (bot.linked_channel_id) {
-       await grantChannelAccess(
-         sub.id,
-         bot.id,
-         Number(sub.telegram_user_id),
-         Number(bot.linked_channel_id),
-         botToken
-       );
+    // Case 2: Client Platform Payment (Notify Client)
+    if (tx.clients) {
+        const client = tx.clients;
+        if (!client.telegram_user_id) return;
+
+        try {
+            // Use fresh bot instance to avoid context issues
+            const mainBot = new Bot(config.MAIN_BOT_TOKEN);
+            
+            await safeSendMessage(
+                mainBot, 
+                Number(client.telegram_user_id), 
+                `✅ *Payment Received*\n\nYour platform subscription has been activated! Thank you for choosing ${PLATFORM.NAME}.\n\nUse /subscription to view your status.`, 
+                { parse_mode: 'Markdown' }
+            );
+            
+            logger.info({ clientId: client.id }, 'Client notified of platform payment');
+        } catch (error) {
+            logger.error({ error, clientId: client.id }, 'Failed to notify client of payment');
+        }
     }
 }
 

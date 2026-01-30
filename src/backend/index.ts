@@ -8,6 +8,9 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { config, isDevelopment, isProduction } from '../shared/config/index.js';
 import { createLogger } from '../shared/utils/logger.js';
+import { initSentry } from '../shared/utils/sentry.js';
+
+initSentry('backend-api');
 
 // Import routes
 import { registerWebhookRoutes } from './webhooks/nowpayments/handler.js';

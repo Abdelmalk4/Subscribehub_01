@@ -8,7 +8,11 @@ import { conversations } from '@grammyjs/conversations';
 import { limit } from '@grammyjs/ratelimiter';
 import { sellingBotLogger as logger, decrypt } from '../shared/utils/index.js';
 import { createSupabaseStorage } from '../shared/utils/session-storage.js';
+import { initSentry } from '../shared/utils/sentry.js';
 import type { SellingBotContext, SellingBotSessionData } from '../shared/types/index.js';
+
+// Initialize Sentry
+initSentry('selling-bot');
 import { supabase, type SellingBot, type Client } from '../database/index.js';
 
 // Import handlers

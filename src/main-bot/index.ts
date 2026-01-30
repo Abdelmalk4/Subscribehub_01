@@ -9,7 +9,11 @@ import { limit } from '@grammyjs/ratelimiter';
 import { config } from '../shared/config/index.js';
 import { mainBotLogger as logger } from '../shared/utils/index.js';
 import { createSupabaseStorage } from '../shared/utils/session-storage.js';
+import { initSentry } from '../shared/utils/sentry.js';
 import type { MainBotContext, MainBotSessionData } from '../shared/types/index.js';
+
+// Initialize Sentry
+initSentry('main-bot');
 
 // Import middleware
 import { setupAdminMiddleware } from './middleware/admin.js';

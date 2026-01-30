@@ -30,6 +30,9 @@ const envSchema = z.object({
   NOWPAYMENTS_IPN_CALLBACK_URL: z.string().url().optional(),
   NOWPAYMENTS_IPN_SECRET: z.string().min(1),
   NOWPAYMENTS_API_KEY: z.string().optional(),
+  
+  // Monitoring
+  SENTRY_DSN: z.string().url().optional(),
 
   // Security
   ADMIN_API_KEY: z.string().min(1),

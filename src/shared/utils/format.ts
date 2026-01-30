@@ -2,7 +2,9 @@
  * Formatting Utilities
  */
 
-import { PLATFORM } from '../config/index.js';
+
+import { PLATFORM, config } from '../config/index.js';
+import { getMainBotUsername } from './runtime.js';
 
 /**
  * Format currency amount with symbol
@@ -53,7 +55,7 @@ export function formatPlanButton(name: string, price: number, currency: string, 
  */
 export function withFooter(message: string): string {
   // Create clickable footer that links to the platform
-  return `${message}\n\n_Powered by_ [TeleTrade](https://t.me/TeleTradeBot)`;
+  return `${message}\n\n_Powered by_ [${config.PLATFORM_NAME}](https://t.me/${getMainBotUsername()})`;
 }
 
 /**

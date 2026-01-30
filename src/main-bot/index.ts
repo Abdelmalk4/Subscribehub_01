@@ -7,7 +7,7 @@ import { Bot, session } from 'grammy';
 import { conversations, createConversation } from '@grammyjs/conversations';
 import { limit } from '@grammyjs/ratelimiter';
 import { config } from '../shared/config/index.js';
-import { mainBotLogger as logger } from '../shared/utils/index.js';
+import { mainBotLogger as logger, setMainBotUsername } from '../shared/utils/index.js';
 import { createSupabaseStorage } from '../shared/utils/session-storage.js';
 import { initSentry } from '../shared/utils/sentry.js';
 import type { MainBotContext, MainBotSessionData } from '../shared/types/index.js';
@@ -145,6 +145,11 @@ async function startBot() {
   try {
     const me = await mainBot.api.getMe();
     logger.info({ username: me.username, id: me.id }, 'Main Bot connected');
+    
+    // Store username for global usage (e.g. in footers)
+    if (me.username) {
+      setMainBotUsername(me.username);
+    }
 
     // Start Main Bot
     mainBot.start({

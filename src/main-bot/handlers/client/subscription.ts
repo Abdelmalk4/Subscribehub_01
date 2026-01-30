@@ -211,7 +211,7 @@ async function createPlatformInvoice(ctx: MainBotContext, planId: string) {
         amount: plan.price_amount,
         currency: plan.price_currency,
         payment_status: 'PENDING',
-        expires_at: addDays(new Date(), 0).toISOString(), // Use 0 to default to now + invoice expiration
+        expires_at: new Date(Date.now() + PLATFORM.INVOICE_EXPIRATION_MINUTES * 60 * 1000).toISOString(),
       })
       .select()
       .single();

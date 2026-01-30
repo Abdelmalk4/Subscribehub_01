@@ -8,6 +8,7 @@ import { conversations, createConversation } from '@grammyjs/conversations';
 import { limit } from '@grammyjs/ratelimiter';
 import { config } from '../shared/config/index.js';
 import { mainBotLogger as logger } from '../shared/utils/index.js';
+import { createSupabaseStorage } from '../shared/utils/session-storage.js';
 import type { MainBotContext, MainBotSessionData } from '../shared/types/index.js';
 
 // Import middleware
@@ -48,7 +49,12 @@ function initialSession(): MainBotSessionData {
   return {};
 }
 
-mainBot.use(session({ initial: initialSession }));
+// Use persistent storage (survives restarts)
+mainBot.use(session({
+  initial: initialSession,
+  storage: createSupabaseStorage<MainBotSessionData>(),
+  getSessionKey: (ctx) => ctx.from?.id ? `main_${ctx.from.id}` : undefined,
+}));
 
 // =================================
 // Rate Limiting

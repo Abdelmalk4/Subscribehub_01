@@ -7,6 +7,7 @@ import { Bot, session } from 'grammy';
 import { conversations } from '@grammyjs/conversations';
 import { limit } from '@grammyjs/ratelimiter';
 import { sellingBotLogger as logger, decrypt } from '../shared/utils/index.js';
+import { createSupabaseStorage } from '../shared/utils/session-storage.js';
 import type { SellingBotContext, SellingBotSessionData } from '../shared/types/index.js';
 import { supabase, type SellingBot, type Client } from '../database/index.js';
 
@@ -35,12 +36,16 @@ export function createSellingBot(botToken: string, botId: string): Bot<SellingBo
 
   const bot = new Bot<SellingBotContext>(botToken);
 
-  // Session setup
+  // Session setup with persistent storage
   function initialSession(): SellingBotSessionData {
     return {};
   }
 
-  bot.use(session({ initial: initialSession }));
+  bot.use(session({
+    initial: initialSession,
+    storage: createSupabaseStorage<SellingBotSessionData>(),
+    getSessionKey: (ctx) => ctx.from?.id ? `sell_${botId}_${ctx.from.id}` : undefined,
+  }));
   bot.use(conversations());
 
   // Rate limiting - prevent spam

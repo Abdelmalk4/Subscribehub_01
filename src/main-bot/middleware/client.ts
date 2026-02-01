@@ -33,6 +33,7 @@ export function setupClientMiddleware(): Middleware<MainBotContext> {
             platformSubscriptionEnd: client.platform_subscription_end
               ? new Date(client.platform_subscription_end)
               : undefined,
+            subscriptionPlanId: client.platform_subscription_plan_id ?? undefined,
           };
         }
       } catch (error) {

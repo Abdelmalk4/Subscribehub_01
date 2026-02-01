@@ -95,6 +95,7 @@ export interface ClientData {
   trialEndDate?: Date;
   trialActivated: boolean;
   platformSubscriptionEnd?: Date;
+  subscriptionPlanId?: string;
 }
 
 export type ClientStatus = 

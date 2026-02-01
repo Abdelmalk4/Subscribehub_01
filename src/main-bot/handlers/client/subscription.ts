@@ -197,7 +197,7 @@ async function createPlatformInvoice(ctx: MainBotContext, planId: string) {
       priceAmount: Number(plan.price_amount),
       priceCurrency: plan.price_currency,
       orderId,
-      orderDescription: `TeleTrade Platform - ${plan.name}`,
+      orderDescription: `SubscribeHub Platform - ${plan.name}`,
       ipnCallbackUrl: config.NOWPAYMENTS_IPN_CALLBACK_URL || '',
     });
 

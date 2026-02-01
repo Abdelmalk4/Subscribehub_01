@@ -1,5 +1,5 @@
 /**
- * TeleTrade Configuration
+ * SubscribeHub Configuration
  * Centralized configuration with environment variables
  */
 
@@ -40,8 +40,8 @@ const envSchema = z.object({
   ALLOWED_ORIGINS: z.string().default('*').transform(val => val.split(',')),
 
   // Platform
-  PLATFORM_NAME: z.string().default('TeleTrade'),
-  PLATFORM_FOOTER_TEXT: z.string().default('Powered by TeleTrade'),
+  PLATFORM_NAME: z.string().default('SubscribeHub'),
+  PLATFORM_FOOTER_TEXT: z.string().default('Powered by SubscribeHub'),
   TRIAL_DURATION_DAYS: z.coerce.number().default(7),
   GRACE_PERIOD_DAYS: z.coerce.number().default(3),
 

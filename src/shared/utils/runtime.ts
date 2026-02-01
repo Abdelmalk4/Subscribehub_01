@@ -11,5 +11,5 @@ export function setMainBotUsername(username: string) {
 
 export function getMainBotUsername(): string {
   // Return stored username or fallback to default if not yet set
-  return mainBotUsername || 'TeleTradeBot';
+  return mainBotUsername || 'SubscribeHubBot';
 }

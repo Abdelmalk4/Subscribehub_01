@@ -1,5 +1,5 @@
 /**
- * TeleTrade Shared Types
+ * SubscribeHub Shared Types
  * Type definitions used across Main Bot, Selling Bot, and Backend
  */
 

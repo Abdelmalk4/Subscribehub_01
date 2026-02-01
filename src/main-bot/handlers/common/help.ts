@@ -123,8 +123,8 @@ Go to "My Bots" → Select bot → "Subscribers"
 
 For assistance, please contact:
 
-📬 Email: support@teletrade.io
-💬 Telegram: @TeleTradeSupport
+📬 Email: support@subscribehub.io
+💬 Telegram: @SubscribeHubSupport
 
 *When contacting support, please include:*
 • Your username

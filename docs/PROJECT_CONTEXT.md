@@ -1,4 +1,4 @@
-# TeleTrade Project Context
+# SubscribeHub Project Context
 
 **Version:** 1.0\
 **Last Updated:** February 1, 2026
@@ -7,7 +7,7 @@
 
 ## 1. System Overview
 
-**TeleTrade** is a white-label Telegram subscription automation platform. It
+**SubscribeHub** is a white-label Telegram subscription automation platform. It
 allows "Clients" (channel owners) to create and manage their own "Selling Bots"
 that automatically sell subscriptions, accept crypto payments, and manage user
 access to private Telegram channels or groups.
@@ -18,8 +18,8 @@ access to private Telegram channels or groups.
 - **Non-custodial**: Payments go directly to Client wallets via NOWPayments.
 - **Automated**: Instant access granting and revocation upon subscription
   expiry.
-- **Platform Model**: TeleTrade charges Clients a subscription fee for using the
-  platform (tiered limits).
+- **Platform Model**: SubscribeHub charges Clients a subscription fee for using
+  the platform (tiered limits).
 
 ---
 

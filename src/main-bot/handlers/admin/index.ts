@@ -41,7 +41,7 @@ export function setupAdminHandlers(bot: Bot<MainBotContext>) {
     await ctx.reply(withFooter(`
 ⚙️ <b>Platform Settings</b>
 
-Configure your TeleTrade platform.
+Configure your SubscribeHub platform.
 
 • <b>Platform Plans</b> - Manage subscription plans for clients
 • <b>IPN Settings</b> - NOWPayments webhook configuration

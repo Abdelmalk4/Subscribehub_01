@@ -1,12 +1,12 @@
-# TeleTrade
+# SubscribeHub
 
 **White-label Telegram subscription automation platform with crypto payments**
 
 ## Overview
 
-TeleTrade enables Telegram trading signal channel owners to automate subscriber
-management, payment processing, and access control through cryptocurrency
-payments.
+SubscribeHub enables Telegram trading signal channel owners to automate
+subscriber management, payment processing, and access control through
+cryptocurrency payments.
 
 - **Multitenancy**: Clients can run multiple selling bots (managed via database)
 - **7-day free trial**: Automatic trial activation on first bot creation
@@ -112,7 +112,7 @@ src/
 │   ├── utils/          # Helpers (logger, date, format)
 │   └── integrations/   # NOWPayments, Telegram utils
 │
-└── 
+└──
 ```
 
 ## Key Features

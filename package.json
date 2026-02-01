@@ -1,7 +1,7 @@
 {
-    "name": "teletrade",
+    "name": "subscribehub",
     "version": "1.0.0",
-    "description": "White-label Telegram subscription automation platform with crypto payments",
+    "description": "White-label Telegram subscription automation platform (SubscribeHub) with crypto payments",
     "private": true,
     "type": "module",
     "scripts": {

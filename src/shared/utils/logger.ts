@@ -19,7 +19,7 @@ export const logger = pino({
       }
     : undefined,
   base: {
-    service: 'teletrade',
+    service: 'subscribehub',
   },
 });
 

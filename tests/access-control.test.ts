@@ -18,8 +18,8 @@ vi.mock('../src/shared/config/index.js', () => ({
   isProduction: false,
   PLATFORM: {
     INVOICE_EXPIRATION_MINUTES: 30,
-    NAME: 'TeleTrade',
-    FOOTER: 'Powered by TeleTrade',
+    NAME: 'SubscribeHub',
+    FOOTER: 'Powered by SubscribeHub',
   },
 }));
 
@@ -47,7 +47,7 @@ describe('Access Control Service', () => {
 
   describe('revokeChannelAccess', () => {
     it('should use ban then unban strategy', () => {
-      // Validates the revocation strategy that TeleTrade uses:
+      // Validates the revocation strategy that SubscribeHub uses:
       // 1. Ban for 1 minute (removes from channel)
       // 2. Immediately unban (allows re-subscription later)
       const banDuration = Math.floor(Date.now() / 1000) + 60; // 1 minute

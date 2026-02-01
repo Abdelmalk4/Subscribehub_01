@@ -60,7 +60,7 @@ async function showWelcome(ctx: SellingBotContext) {
       .text('❓ Help', 'help');
 
     const welcomeText = botConfig.welcomeMessage 
-      ? escapeHtml(botConfig.welcomeMessage)
+      ? withFooter(escapeHtml(botConfig.welcomeMessage))
       : new MessageBuilder()
         .header('👋', `Welcome, ${firstName}!`)
         .break()
@@ -73,12 +73,9 @@ async function showWelcome(ctx: SellingBotContext) {
     // If we wanted to support simplified markup we'd need a parser, but for now we treat it as text.
 
     await ctx.reply(
-      // If custom welcome message, we assume it's just text for now unless we add a rich editor.
-      // We wrap it in withFooter if it's custom, or if it's our builder result (which already has footer/is string).
-      // Wait, our builder adds footer. If custom message is used, we should probably add footer too.
-      // But the logic above: if botConfig.welcomeMessage is present, we escape it.
-      // So we should wrap it with footer.
-      withFooter(welcomeText), 
+      // If custom welcome message, we help wrap with footer above.
+      // If it's our builder result, it already has footer.
+      welcomeText, 
       {
         parse_mode: 'HTML',
         reply_markup: keyboard,

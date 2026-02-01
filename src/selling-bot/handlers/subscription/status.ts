@@ -48,7 +48,7 @@ async function showStatus(ctx: SellingBotContext) {
       .raw(daysLeft <= 3 ? '⚠️ <b>Your subscription is expiring soon!</b>\n' : '')
       .toString();
 
-    await ctx.reply(withFooter(message), {
+    await ctx.reply(message, {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
@@ -66,7 +66,7 @@ async function showStatus(ctx: SellingBotContext) {
       .line('Your subscription has expired. Subscribe now to regain access!')
       .toString();
 
-    await ctx.reply(withFooter(message), {
+    await ctx.reply(message, {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
@@ -81,7 +81,7 @@ async function showStatus(ctx: SellingBotContext) {
       .line('Your access has been revoked. Please contact support for assistance.')
       .toString();
 
-    await ctx.reply(withFooter(message), {
+    await ctx.reply(message, {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
@@ -101,7 +101,7 @@ async function showStatus(ctx: SellingBotContext) {
       .line('Choose a plan to get started!')
       .toString();
 
-    await ctx.reply(withFooter(message), {
+    await ctx.reply(message, {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });

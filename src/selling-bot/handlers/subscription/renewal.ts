@@ -87,7 +87,7 @@ async function showRenewalOptions(ctx: SellingBotContext) {
   mb.line('Select a plan to renew:');
   const message = mb.toString();
 
-  await ctx.reply(withFooter(message), {
+  await ctx.reply(message, {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });

@@ -403,7 +403,7 @@ async function showBotDetails(ctx: MainBotContext, botId: string) {
     .field('Share Link', `<a href="https://t.me/${escapeHtml(bot.bot_username || '')}">t.me/${escapeHtml(bot.bot_username || '')}</a>`)
     .toString();
 
-  await ctx.reply(withFooter(message), {
+  await ctx.reply(message, {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });
@@ -457,7 +457,7 @@ async function showBotSubscribers(ctx: MainBotContext, botId: string) {
 
   keyboard.text('« Back to Bot', `view_bot:${botId}`);
 
-  await ctx.reply(withFooter(message), {
+  await ctx.reply(message, {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });
@@ -518,7 +518,7 @@ async function showBotPlans(ctx: MainBotContext, botId: string) {
 
   keyboard.text('« Back to Bot', `view_bot:${botId}`);
 
-  await ctx.reply(withFooter(message), {
+  await ctx.reply(message, {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });

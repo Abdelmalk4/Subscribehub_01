@@ -95,7 +95,7 @@ async function showWelcome(ctx: MainBotContext, firstName: string) {
     .line('Ready to get started?')
     .toString();
 
-  await ctx.reply(withFooter(message), {
+  await ctx.reply(message, {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });
@@ -114,7 +114,7 @@ async function showClientDashboard(ctx: MainBotContext, firstName: string) {
       .break()
       .line("Your registration is being reviewed. You'll receive a notification once approved.")
       .toString();
-    await ctx.reply(withFooter(message), { parse_mode: 'HTML' });
+    await ctx.reply(message, { parse_mode: 'HTML' });
     return;
   }
 
@@ -152,7 +152,7 @@ async function showClientDashboard(ctx: MainBotContext, firstName: string) {
     .line('What would you like to do?')
     .toString();
 
-  await ctx.reply(withFooter(message), {
+  await ctx.reply(message, {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });
@@ -176,7 +176,7 @@ async function showAdminDashboard(ctx: MainBotContext, firstName: string) {
     .line(`You have admin access to the ${PLATFORM.NAME} platform.`)
     .toString();
 
-  await ctx.reply(withFooter(message), {
+  await ctx.reply(message, {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });

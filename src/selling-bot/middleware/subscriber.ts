@@ -31,6 +31,49 @@ export function setupSubscriberMiddleware(): Middleware<SellingBotContext> {
 
       // Create new subscriber if not exists
       if (!subscriber) {
+        // Enforce max_subscribers limit from client's subscription plan
+        const { data: botData } = await supabase
+          .from('selling_bots')
+          .select('client_id')
+          .eq('id', botId)
+          .single();
+        
+        if (botData) {
+          const { data: clientData } = await supabase
+            .from('clients')
+            .select('subscription_plan_id')
+            .eq('id', (botData as { client_id: string }).client_id)
+            .single();
+          
+          const planId = (clientData as { subscription_plan_id: string | null } | null)?.subscription_plan_id;
+          
+          if (planId) {
+            const { data: plan } = await supabase
+              .from('subscription_plans')
+              .select('max_subscribers')
+              .eq('id', planId)
+              .single();
+            
+            const maxSubscribers = (plan as { max_subscribers: number | null } | null)?.max_subscribers;
+            
+            if (maxSubscribers) {
+              const { count: currentSubCount } = await supabase
+                .from('subscribers')
+                .select('*', { count: 'exact', head: true })
+                .eq('bot_id', botId);
+              
+              if (currentSubCount !== null && currentSubCount >= maxSubscribers) {
+                logger.warn({ botId, currentSubCount, maxSubscribers }, 'Subscriber limit reached');
+                await ctx.reply(
+                  '❌ This bot has reached its subscriber limit.\n\n' +
+                  'Please contact the owner for assistance.'
+                );
+                return;
+              }
+            }
+          }
+        }
+
         const { data: newSubData, error } = await (supabase
           .from('subscribers') as any)
           .insert({

@@ -28,7 +28,12 @@ interface WebhookBody {
   order_description: string;
   outcome_amount: number;
   outcome_currency: string;
+  created_at?: string; // NOWPayments may include this
+  updated_at?: string; // NOWPayments may include this
 }
+
+// Webhook replay protection window (5 minutes)
+const WEBHOOK_MAX_AGE_MS = 5 * 60 * 1000;
 
 export function registerWebhookRoutes(app: FastifyInstance) {
   app.post<{ Body: WebhookBody }>(
@@ -57,6 +62,19 @@ export function registerWebhookRoutes(app: FastifyInstance) {
       }
 
       const payload = request.body;
+
+      // Webhook replay protection - reject old webhooks
+      if (payload.updated_at) {
+        const webhookTime = new Date(payload.updated_at).getTime();
+        const now = Date.now();
+        if (now - webhookTime > WEBHOOK_MAX_AGE_MS) {
+          logger.warn({ 
+            invoiceId: payload.invoice_id, 
+            webhookAge: (now - webhookTime) / 1000 
+          }, 'Webhook too old - potential replay attack');
+          return reply.status(400).send({ error: 'Webhook expired' });
+        }
+      }
 
       try {
         // Idempotency check - prevent replay attacks and duplicate processing
@@ -131,7 +149,12 @@ async function triggerPostPaymentActions(invoiceId: number) {
         if (botToken.includes(':')) { // simple check if encrypted
              // Dynamic Import to avoid circular dependencies if any
              const { decrypt } = await import('../../../shared/utils/encryption.js');
-             try { botToken = decrypt(botToken); } catch {}
+             try { 
+               botToken = decrypt(botToken); 
+             } catch (decryptError) {
+               logger.error({ error: decryptError, botId: bot.id }, 'Failed to decrypt bot token in post-payment action - using raw token');
+               // Continue with unencrypted token as fallback, but log the issue
+             }
         }
 
         if (bot.linked_channel_id) {

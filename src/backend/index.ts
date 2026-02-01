@@ -31,9 +31,10 @@ const app = Fastify({
 });
 
 // CORS Configuration
-// Warn if wildcard in production
+// BLOCK wildcard in production - this is a critical security risk
 if (isProduction && config.ALLOWED_ORIGINS.includes('*')) {
-  logger.warn('CORS wildcard (*) is enabled in production. This is a security risk.');
+  logger.fatal('CORS wildcard (*) is NOT ALLOWED in production. Please set ALLOWED_ORIGINS to specific domains.');
+  process.exit(1);
 }
 
 await app.register(cors, {

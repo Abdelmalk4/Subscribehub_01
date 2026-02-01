@@ -19,6 +19,35 @@ export async function botCreationConversation(
     return;
   }
 
+  // Enforce max_bots limit from client's subscription plan
+  if (client.subscriptionPlanId) {
+    const { data: plan } = await supabase
+      .from('subscription_plans')
+      .select('max_bots')
+      .eq('id', client.subscriptionPlanId)
+      .single();
+    
+    const maxBots = (plan as { max_bots: number | null } | null)?.max_bots;
+    
+    if (maxBots) {
+      const { count: currentBotCount } = await supabase
+        .from('selling_bots')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', client.id);
+
+      if (currentBotCount !== null && currentBotCount >= maxBots) {
+        await ctx.reply(
+          `❌ <b>Bot Limit Reached</b>\n\n` +
+          `Your plan allows a maximum of ${maxBots} bots.\n` +
+          `You currently have ${currentBotCount} bots.\n\n` +
+          `Upgrade your plan to create more bots.`,
+          { parse_mode: 'HTML' }
+        );
+        return;
+      }
+    }
+  }
+
   // Step 1: Get Bot Token
   await ctx.reply(
     '🤖 <b>Step 1/4: Bot Token</b>\n\n' +

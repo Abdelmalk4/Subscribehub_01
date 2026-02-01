@@ -59,17 +59,17 @@ async function showSubscriptionStatus(ctx: MainBotContext) {
     keyboard.text('« Back', 'start');
 
     const message = `
-💳 *Your Subscription*
+💳 <b>Your Subscription</b>
 
-*Status:* 🆓 Free Trial
-*Days Remaining:* ${daysLeft}
-*Trial Ends:* ${fullClient.trial_end_date ? formatDate(new Date(fullClient.trial_end_date)) : 'N/A'}
+<b>Status:</b> 🆓 Free Trial
+<b>Days Remaining:</b> ${daysLeft}
+<b>Trial Ends:</b> ${fullClient.trial_end_date ? formatDate(new Date(fullClient.trial_end_date)) : 'N/A'}
 
 Upgrade now to ensure uninterrupted service!
 `;
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } else if (fullClient.status === 'ACTIVE') {
@@ -83,18 +83,18 @@ Upgrade now to ensure uninterrupted service!
     keyboard.text('« Back', 'start');
 
     const message = `
-💳 *Your Subscription*
+💳 <b>Your Subscription</b>
 
-*Status:* ✅ Active
-*Plan:* ${plan?.name || 'Unknown'}
-*Renews:* ${fullClient.platform_subscription_end ? formatDate(new Date(fullClient.platform_subscription_end)) : 'N/A'}
-*Days Left:* ${daysLeft}
+<b>Status:</b> ✅ Active
+<b>Plan:</b> ${plan?.name || 'Unknown'}
+<b>Renews:</b> ${fullClient.platform_subscription_end ? formatDate(new Date(fullClient.platform_subscription_end)) : 'N/A'}
+<b>Days Left:</b> ${daysLeft}
 
-${plan ? `*Plan Limits:*\n• Max Bots: ${plan.max_bots || 'Unlimited'}\n• Max Subscribers/Bot: ${plan.max_subscribers || 'Unlimited'}` : ''}
+${plan ? `<b>Plan Limits:</b>\n• Max Bots: ${plan.max_bots || 'Unlimited'}\n• Max Subscribers/Bot: ${plan.max_subscribers || 'Unlimited'}` : ''}
 `;
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } else if (fullClient.status === 'EXPIRED') {
@@ -102,9 +102,9 @@ ${plan ? `*Plan Limits:*\n• Max Bots: ${plan.max_bots || 'Unlimited'}\n• Max
     keyboard.text('« Back', 'start');
 
     const message = `
-💳 *Your Subscription*
+💳 <b>Your Subscription</b>
 
-*Status:* ⚠️ Expired
+<b>Status:</b> ⚠️ Expired
 
 Your subscription has expired. Your selling bots are paused.
 
@@ -112,14 +112,14 @@ Reactivate now to resume service!
 `;
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } else {
     keyboard.text('« Back', 'start');
     await ctx.reply(
-      withFooter(`💳 *Your Subscription*\n\n*Status:* ${fullClient.status}`),
-      { parse_mode: 'Markdown', reply_markup: keyboard }
+      withFooter(`💳 <b>Your Subscription</b>\n\n<b>Status:</b> ${fullClient.status}`),
+      { parse_mode: 'HTML', reply_markup: keyboard }
     );
   }
 }
@@ -141,10 +141,10 @@ async function showPlatformPlans(ctx: MainBotContext) {
 
   const keyboard = new InlineKeyboard();
 
-  let message = '📋 *Platform Subscription Plans*\n\n';
+  let message = '📋 <b>Platform Subscription Plans</b>\n\n';
 
   for (const plan of plans) {
-    message += `*${plan.name}*\n`;
+    message += `<b>${plan.name}</b>\n`;
     message += `💰 ${formatPrice(Number(plan.price_amount), plan.price_currency)} / ${formatDuration(plan.duration_days)}\n`;
     if (plan.max_bots) message += `🤖 Up to ${plan.max_bots} bots\n`;
     if (plan.max_subscribers) message += `👥 Up to ${plan.max_subscribers} subscribers/bot\n`;
@@ -160,7 +160,7 @@ async function showPlatformPlans(ctx: MainBotContext) {
   keyboard.text('« Back', 'subscription');
 
   await ctx.reply(withFooter(message), {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: keyboard,
   });
 }
@@ -225,19 +225,19 @@ async function createPlatformInvoice(ctx: MainBotContext, planId: string) {
       .text('« Back to Plans', 'platform_plans');
 
     const message = `
-💳 *Payment for ${plan.name}*
+💳 <b>Payment for ${plan.name}</b>
 
-*Amount:* ${formatPrice(Number(plan.price_amount), plan.price_currency)}
-*Duration:* ${formatDuration(plan.duration_days)}
+<b>Amount:</b> ${formatPrice(Number(plan.price_amount), plan.price_currency)}
+<b>Duration:</b> ${formatDuration(plan.duration_days)}
 
 Click the button below to pay securely via NOWPayments.
 You will be redirected to a hosted checkout page.
 
-_Invoice expires in ${PLATFORM.INVOICE_EXPIRATION_MINUTES} minutes._
+<i>Invoice expires in ${PLATFORM.INVOICE_EXPIRATION_MINUTES} minutes.</i>
 `;
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
 

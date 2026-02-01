@@ -5,7 +5,7 @@
 
 import { Bot, InlineKeyboard } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
-import { withFooter } from '../../../shared/utils/index.js';
+import { withFooter, escapeHtml } from '../../../shared/utils/index.js';
 
 export function setupHelpHandler(bot: Bot<SellingBotContext>) {
   bot.command('help', async (ctx) => {
@@ -29,25 +29,25 @@ async function showHelp(ctx: SellingBotContext) {
     .text('« Back to Menu', 'start');
 
   const message = `
-❓ *Help & Support*
+❓ <b>Help & Support</b>
 
-*Common Commands:*
+<b>Common Commands:</b>
 /start - Main menu
 /plans - View subscription plans
 /status - Check your subscription
 /help - This help message
 
-*Payment Issues:*
+<b>Payment Issues:</b>
 • Payments are processed via NOWPayments
 • Confirmations usually take 1-10 minutes
 • Make sure to send the exact amount
 
-*Need more help?*
-${channelUsername ? `Contact: @${channelUsername}` : 'Contact the channel owner'}
+<b>Need more help?</b>
+${channelUsername ? `Contact: @${escapeHtml(channelUsername)}` : 'Contact the channel owner'}
 `;
 
   await ctx.reply(withFooter(message), {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: keyboard,
   });
 }

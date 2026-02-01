@@ -5,7 +5,7 @@
 import { Bot, InlineKeyboard, Keyboard } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type SellingBot, type Subscriber, type SubscriptionPlan } from '../../../database/index.js';
-import { withFooter, formatDate, formatPrice, formatDuration, decrypt, escapeMarkdown, escapeHtml } from '../../../shared/utils/index.js';
+import { withFooter, formatDate, formatPrice, formatDuration, decrypt, escapeHTML, escapeHtml } from '../../../shared/utils/index.js';
 import { mainBotLogger as logger } from '../../../shared/utils/index.js';
 import { clientOnly } from '../../middleware/client.js';
 

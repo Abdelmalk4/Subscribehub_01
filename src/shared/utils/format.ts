@@ -67,9 +67,9 @@ export function truncate(text: string, maxLength: number): string {
 }
 
 /**
- * Escape markdown characters (Deprecated - prefer HTML)
+ * Escape HTML characters (Deprecated - prefer HTML)
  */
-export function escapeMarkdown(text: string): string {
+export function escapeHTML(text: string): string {
   return text.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
 }
 
@@ -89,7 +89,7 @@ export function escapeHtml(text: string): string {
  * Format Telegram user mention
  */
 export function formatUserMention(userId: bigint, name: string): string {
-  return `[${escapeMarkdown(name)}](tg://user?id=${userId})`;
+  return `[${escapeHTML(name)}](tg://user?id=${userId})`;
 }
 
 /**

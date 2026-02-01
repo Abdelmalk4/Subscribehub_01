@@ -83,7 +83,7 @@ async function showRenewalOptions(ctx: SellingBotContext) {
   message += 'Select a plan to renew:';
 
   await ctx.reply(withFooter(message), {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: keyboard,
   });
 }

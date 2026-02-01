@@ -16,7 +16,7 @@ export async function adminPlanCreationConversation(
     '📝 *Step 1/4: Platform Plan Name*\n\n' +
       'Enter a name for this platform subscription plan:\n\n' +
       '_Example: "Pro - Monthly", "Enterprise"_',
-    { parse_mode: 'Markdown' }
+    { parse_mode: 'HTML' }
   );
 
   const nameCtx = await conversation.waitFor('message:text');
@@ -32,7 +32,7 @@ export async function adminPlanCreationConversation(
     '💰 *Step 2/4: Price*\n\n' +
       'Enter the price in USD:\n\n' +
       '_Example: 9.99, 29, 99.99_',
-    { parse_mode: 'Markdown' }
+    { parse_mode: 'HTML' }
   );
 
   const priceCtx = await conversation.waitFor('message:text');
@@ -48,7 +48,7 @@ export async function adminPlanCreationConversation(
     '📅 *Step 3/4: Duration*\n\n' +
       'Enter the subscription duration in days:\n\n' +
       '_Example: 30 (monthly), 365 (yearly)_',
-    { parse_mode: 'Markdown' }
+    { parse_mode: 'HTML' }
   );
 
   const durationCtx = await conversation.waitFor('message:text');
@@ -64,7 +64,7 @@ export async function adminPlanCreationConversation(
     '📝 *Step 4/4: Description (Optional)*\n\n' +
       'Enter a short description, or send /skip:\n\n' +
       '_Example: "Includes up to 5 bots and 1000 subscribers"_',
-    { parse_mode: 'Markdown' }
+    { parse_mode: 'HTML' }
   );
 
   const descCtx = await conversation.waitFor('message:text');
@@ -84,7 +84,7 @@ export async function adminPlanCreationConversation(
       `*Description:* ${description || 'None'}\n\n` +
       `Create this plan?`,
     {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     }
   );
@@ -127,7 +127,7 @@ export async function adminPlanCreationConversation(
           `*${plan.name}* is now active.\n\n` +
           `Admin > Platform Settings > Plans`
       ),
-      { parse_mode: 'Markdown' }
+      { parse_mode: 'HTML' }
     );
 
     logger.info({ planId: plan.id, name }, 'Platform plan created');

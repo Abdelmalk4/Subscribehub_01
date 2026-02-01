@@ -72,7 +72,7 @@ Use /subscription to view available plans.
 `);
 
       await safeSendMessage(mainBot, Number(client.telegramUserId), message, {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
       });
 
       logger.info({ clientId: client.id }, 'Trial expired and client notified');
@@ -104,7 +104,7 @@ async function sendTrialReminders(): Promise<void> {
           mainBot,
           Number(client.telegramUserId),
           message,
-          { parse_mode: 'Markdown' }
+          { parse_mode: 'HTML' }
         );
 
         await logTrialReminderSent(client.id, days, success);

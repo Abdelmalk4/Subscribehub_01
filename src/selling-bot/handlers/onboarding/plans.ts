@@ -5,7 +5,7 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
 import { supabase, type SubscriptionPlan } from '../../../database/index.js';
-import { withFooter, formatPlanButton, formatDuration, formatPrice } from '../../../shared/utils/index.js';
+import { withFooter, formatPlanButton, formatDuration, formatPrice, escapeHtml } from '../../../shared/utils/index.js';
 import { sellingBotLogger as logger } from '../../../shared/utils/index.js';
 
 export function setupPlansHandler(bot: Bot<SellingBotContext>) {
@@ -41,8 +41,8 @@ async function showPlans(ctx: SellingBotContext) {
 
     if (!plans || plans.length === 0) {
       await ctx.reply(
-        withFooter('📋 *No Plans Available*\n\nThere are currently no subscription plans available.'),
-        { parse_mode: 'Markdown' }
+        withFooter('📋 <b>No Plans Available</b>\n\nThere are currently no subscription plans available.'),
+        { parse_mode: 'HTML' }
       );
       return;
     }
@@ -56,19 +56,19 @@ async function showPlans(ctx: SellingBotContext) {
 
     keyboard.text('« Back', 'start');
 
-    let message = '📋 *Available Subscription Plans*\n\n';
+    let message = '📋 <b>Available Subscription Plans</b>\n\n';
     
     for (const plan of plans) {
-      message += `*${plan.name}*\n`;
+      message += `<b>${escapeHtml(plan.name)}</b>\n`;
       message += `💰 ${formatPrice(plan.price_amount, plan.price_currency)} for ${formatDuration(plan.duration_days)}\n`;
-      if (plan.description) message += `📝 ${plan.description}\n`;
+      if (plan.description) message += `📝 ${escapeHtml(plan.description)}\n`;
       message += '\n';
     }
 
     message += 'Select a plan to subscribe:';
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } catch (error) {
@@ -103,17 +103,17 @@ async function selectPlan(ctx: SellingBotContext, planId: string) {
       .text('« Back to Plans', 'plans');
 
     const message = `
-📋 *Plan Selected*
+📋 <b>Plan Selected</b>
 
-*${plan.name}*
+<b>${escapeHtml(plan.name)}</b>
 💰 ${formatPrice(plan.price_amount, plan.price_currency)}
 📅 Duration: ${formatDuration(plan.duration_days)}
-${plan.description ? `📝 ${plan.description}\n` : ''}
+${plan.description ? `📝 ${escapeHtml(plan.description)}\n` : ''}
 Click "Pay Now" to generate a payment invoice.
 `;
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } catch (error) {

@@ -6,7 +6,7 @@ import { Bot, InlineKeyboard } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
 import { supabase, type SubscriptionPlan, type PaymentTransaction } from '../../../database/index.js';
 import { createInvoice } from '../../../shared/integrations/nowpayments.js';
-import { withFooter, formatPrice, addDays } from '../../../shared/utils/index.js';
+import { withFooter, formatPrice, addDays, escapeHtml } from '../../../shared/utils/index.js';
 import { sellingBotLogger as logger } from '../../../shared/utils/index.js';
 import { config, PLATFORM } from '../../../shared/config/index.js';
 
@@ -86,10 +86,10 @@ async function createPaymentInvoice(ctx: SellingBotContext, planId: string) {
       .text('❌ Cancel', 'plans');
 
     const message = `
-💳 *Payment Invoice Created*
+💳 <b>Payment Invoice Created</b>
 
-*Plan:* ${plan.name}
-*Amount:* ${formatPrice(plan.price_amount, plan.price_currency)}
+<b>Plan:</b> ${escapeHtml(plan.name)}
+<b>Amount:</b> ${formatPrice(plan.price_amount, plan.price_currency)}
 
 Click the button below to complete payment:
 
@@ -97,7 +97,7 @@ Click the button below to complete payment:
 `;
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
 
@@ -128,8 +128,8 @@ async function checkPaymentStatus(ctx: SellingBotContext, transactionId: string)
 
     if (status === 'CONFIRMED') {
       await ctx.reply(
-        withFooter('✅ *Payment Confirmed!*\n\nYour subscription is now active.\n\nUse /start to access your subscription details.'),
-        { parse_mode: 'Markdown' }
+        withFooter('✅ <b>Payment Confirmed!</b>\n\nYour subscription is now active.\n\nUse /start to access your subscription details.'),
+        { parse_mode: 'HTML' }
       );
       return;
     }
@@ -137,8 +137,8 @@ async function checkPaymentStatus(ctx: SellingBotContext, transactionId: string)
     if (status === 'CONFIRMING') {
       keyboard.text('🔄 Check Again', `check_payment:${transactionId}`);
       await ctx.reply(
-        withFooter('⏳ *Payment Detected*\n\nYour payment is being confirmed. This usually takes 1-3 blockchain confirmations.'),
-        { parse_mode: 'Markdown', reply_markup: keyboard }
+        withFooter('⏳ <b>Payment Detected</b>\n\nYour payment is being confirmed. This usually takes 1-3 blockchain confirmations.'),
+        { parse_mode: 'HTML', reply_markup: keyboard }
       );
       return;
     }
@@ -146,8 +146,8 @@ async function checkPaymentStatus(ctx: SellingBotContext, transactionId: string)
     if (status === 'EXPIRED') {
       keyboard.text('📋 View Plans', 'plans');
       await ctx.reply(
-        withFooter('⚠️ *Invoice Expired*\n\nPlease create a new invoice to continue.'),
-        { parse_mode: 'Markdown', reply_markup: keyboard }
+        withFooter('⚠️ <b>Invoice Expired</b>\n\nPlease create a new invoice to continue.'),
+        { parse_mode: 'HTML', reply_markup: keyboard }
       );
       return;
     }
@@ -155,16 +155,16 @@ async function checkPaymentStatus(ctx: SellingBotContext, transactionId: string)
     if (status === 'FAILED') {
       keyboard.text('📋 Try Again', 'plans');
       await ctx.reply(
-        withFooter('❌ *Payment Failed*\n\nPlease try again or contact support.'),
-        { parse_mode: 'Markdown', reply_markup: keyboard }
+        withFooter('❌ <b>Payment Failed</b>\n\nPlease try again or contact support.'),
+        { parse_mode: 'HTML', reply_markup: keyboard }
       );
       return;
     }
 
     keyboard.text('🔄 Check Again', `check_payment:${transactionId}`).row().text('❌ Cancel', 'plans');
     await ctx.reply(
-      withFooter('⏳ *Awaiting Payment*\n\nWe have not detected a payment yet.'),
-      { parse_mode: 'Markdown', reply_markup: keyboard }
+      withFooter('⏳ <b>Awaiting Payment</b>\n\nWe have not detected a payment yet.'),
+      { parse_mode: 'HTML', reply_markup: keyboard }
     );
   } catch (error) {
     logger.error({ error, transactionId }, 'Failed to check payment status');

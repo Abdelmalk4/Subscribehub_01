@@ -31,7 +31,7 @@ export function setupHelpCommand(bot: Bot<MainBotContext>) {
 5️⃣ *Link Channel* - Connect your Telegram channel
 6️⃣ *Create Plans* - Set up subscription plans
 7️⃣ *Share* - Give subscribers your bot link!
-    `), { parse_mode: 'Markdown', reply_markup: keyboard });
+    `), { parse_mode: 'HTML', reply_markup: keyboard });
   });
 
   bot.callbackQuery('help_bot_setup', async (ctx) => {
@@ -52,7 +52,7 @@ export function setupHelpCommand(bot: Bot<MainBotContext>) {
 1. Add your selling bot as admin to your channel
 2. Go to "My Bots" → Select bot → "Link Channel"
 3. Select your channel from the list
-    `), { parse_mode: 'Markdown', reply_markup: keyboard });
+    `), { parse_mode: 'HTML', reply_markup: keyboard });
   });
 
   bot.callbackQuery('help_payments', async (ctx) => {
@@ -73,7 +73,7 @@ export function setupHelpCommand(bot: Bot<MainBotContext>) {
 • Subscriber pays in crypto
 • Access is granted automatically
 • You receive funds to your wallet
-    `), { parse_mode: 'Markdown', reply_markup: keyboard });
+    `), { parse_mode: 'HTML', reply_markup: keyboard });
   });
 
   bot.callbackQuery('help_subscribers', async (ctx) => {
@@ -94,7 +94,7 @@ Go to "My Bots" → Select bot → "Subscribers"
 • Extend subscription
 • Revoke access
 • View payment history
-    `), { parse_mode: 'Markdown', reply_markup: keyboard });
+    `), { parse_mode: 'HTML', reply_markup: keyboard });
   });
 
   bot.callbackQuery('help_settings', async (ctx) => {
@@ -112,7 +112,7 @@ Go to "My Bots" → Select bot → "Subscribers"
 • Business name
 • Contact email
 • Notification preferences
-    `), { parse_mode: 'Markdown', reply_markup: keyboard });
+    `), { parse_mode: 'HTML', reply_markup: keyboard });
   });
 
   bot.callbackQuery('contact_support', async (ctx) => {
@@ -131,7 +131,7 @@ For assistance, please contact:
 • Bot username (if applicable)
 • Description of the issue
 • Screenshots if possible
-    `), { parse_mode: 'Markdown', reply_markup: keyboard });
+    `), { parse_mode: 'HTML', reply_markup: keyboard });
   });
 }
 
@@ -166,7 +166,7 @@ Need more help? Contact our support team.
 `;
 
   await ctx.reply(withFooter(message), {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: keyboard,
   });
 }

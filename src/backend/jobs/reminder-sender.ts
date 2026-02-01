@@ -42,7 +42,7 @@ export async function runReminderSender(): Promise<void> {
             bot,
             Number(sub.telegramUserId),
             message,
-            { parse_mode: 'Markdown' }
+            { parse_mode: 'HTML' }
           );
 
           // Log the reminder

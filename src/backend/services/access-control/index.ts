@@ -57,7 +57,7 @@ Enjoy your premium access!
 `);
 
     await safeSendMessage(bot, telegramUserId, message, {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
     });
 
     logger.info({ subscriberId, channelId }, 'Channel access granted');
@@ -100,7 +100,7 @@ Use /plans to view available options.
 `);
 
       await safeSendMessage(bot, telegramUserId, message, {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
       });
 
       // Log revocation
@@ -166,7 +166,7 @@ Use /plans to view subscription options.
 `);
 
       await safeSendMessage(bot, telegramUserId, message, {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
       });
 
       logger.info({ subscriberId, channelId }, 'Join request declined - no active subscription');

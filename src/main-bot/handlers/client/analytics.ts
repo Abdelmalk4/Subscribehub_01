@@ -98,7 +98,7 @@ async function showAnalytics(ctx: MainBotContext) {
 
 _Last updated: Just now_
   `), {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: keyboard,
   });
 }
@@ -117,7 +117,7 @@ async function showDetailedReport(ctx: MainBotContext) {
   if (!bots || bots.length === 0) {
     const keyboard = new InlineKeyboard().text('« Back to Analytics', 'analytics');
     await ctx.reply(withFooter('📊 *Detailed Report*\n\nNo bots found. Create a bot first!'), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
     return;
@@ -185,7 +185,7 @@ async function showDetailedReport(ctx: MainBotContext) {
     .text('« Back to Analytics', 'analytics');
 
   await ctx.reply(withFooter(reportMessage), {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: keyboard,
   });
 }

@@ -205,13 +205,13 @@ export async function safeSendMessage(
   chatId: number | string,
   text: string,
   options?: {
-    parse_mode?: 'HTML' | 'Markdown' | 'MarkdownV2';
+    parse_mode?: 'HTML' | 'HTML' | 'HTMLV2';
     reply_markup?: InlineKeyboard;
   }
 ): Promise<boolean> {
   try {
     await withRetry(() => bot.api.sendMessage(chatId, text, {
-      parse_mode: options?.parse_mode || 'Markdown',
+      parse_mode: options?.parse_mode || 'HTML',
       reply_markup: options?.reply_markup,
     }));
     return true;

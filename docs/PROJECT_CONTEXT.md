@@ -169,7 +169,7 @@ Key tables and their purposes:
    Should be separated for scale.
 3. **User Notifications**: Clients are not notified when a new Subscriber joins
    (REQ-SB-060).
-4. **Formatting**: Mix of HTML and Markdown parse modes (Consistency needed).
+4. **Formatting**: Mix of HTML and HTML parse modes (Consistency needed).
 
 ---
 

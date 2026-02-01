@@ -5,7 +5,7 @@
 
 import { Bot, InlineKeyboard } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
-import { withFooter, formatDate, daysUntil } from '../../../shared/utils/index.js';
+import { withFooter, formatDate, daysUntil, escapeHtml } from '../../../shared/utils/index.js';
 
 export function setupStartHandler(bot: Bot<SellingBotContext>) {
   bot.command('start', async (ctx) => {
@@ -38,16 +38,16 @@ async function showWelcome(ctx: SellingBotContext) {
       .text('❓ Help', 'help');
 
     const message = `
-👋 *Welcome back, ${firstName}!*
+👋 <b>Welcome back, ${escapeHtml(firstName)}!</b>
 
-✅ *Subscription Active*
+✅ <b>Subscription Active</b>
 📅 Expires: ${expiresOn} (${daysLeft} days left)
 
 You have full access to the premium channel.
 `;
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } else {
@@ -59,16 +59,21 @@ You have full access to the premium channel.
       .row()
       .text('❓ Help', 'help');
 
-    const welcomeMessage = botConfig.welcomeMessage || `
-👋 *Welcome, ${firstName}!*
+    const welcomeText = botConfig.welcomeMessage 
+      ? escapeHtml(botConfig.welcomeMessage)
+      : `
+👋 <b>Welcome, ${escapeHtml(firstName)}!</b>
 
 Get access to premium trading signals and exclusive content.
 
 Select a subscription plan to get started!
 `;
 
-    await ctx.reply(withFooter(welcomeMessage), {
-      parse_mode: 'Markdown',
+    // If welcome message exists but doesn't have HTML tags, we just escape it.
+    // If we wanted to support simplified markup we'd need a parser, but for now we treat it as text.
+
+    await ctx.reply(withFooter(welcomeText), {
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   }

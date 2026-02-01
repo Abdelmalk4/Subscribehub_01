@@ -39,17 +39,17 @@ async function showStatus(ctx: SellingBotContext) {
       .text('« Back', 'start');
 
     const message = `
-📊 *Your Subscription*
+📊 <b>Your Subscription</b>
 
-✅ *Status:* Active
-📅 *Expires:* ${expiresOn}
-⏱️ *Time Left:* ${relativeTime}
+✅ <b>Status:</b> Active
+📅 <b>Expires:</b> ${expiresOn}
+⏱️ <b>Time Left:</b> ${relativeTime}
 
-${daysLeft <= 3 ? '⚠️ *Your subscription is expiring soon!*\n' : ''}
+${daysLeft <= 3 ? '⚠️ <b>Your subscription is expiring soon!</b>\n' : ''}
 `;
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } else if (subscriber.subscriptionStatus === 'EXPIRED') {
@@ -59,30 +59,30 @@ ${daysLeft <= 3 ? '⚠️ *Your subscription is expiring soon!*\n' : ''}
       .text('« Back', 'start');
 
     const message = `
-📊 *Your Subscription*
+📊 <b>Your Subscription</b>
 
-⚠️ *Status:* Expired
+⚠️ <b>Status:</b> Expired
 
 Your subscription has expired. Subscribe now to regain access!
 `;
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } else if (subscriber.subscriptionStatus === 'REVOKED') {
     keyboard.text('❓ Contact Support', 'help');
 
     const message = `
-📊 *Your Subscription*
+📊 <b>Your Subscription</b>
 
-🚫 *Status:* Access Revoked
+🚫 <b>Status:</b> Access Revoked
 
 Your access has been revoked. Please contact support for assistance.
 `;
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } else {
@@ -93,16 +93,16 @@ Your access has been revoked. Please contact support for assistance.
       .text('« Back', 'start');
 
     const message = `
-📊 *Your Subscription*
+📊 <b>Your Subscription</b>
 
-⏳ *Status:* No Active Subscription
+⏳ <b>Status:</b> No Active Subscription
 
 You don't have an active subscription yet.
 Choose a plan to get started!
 `;
 
     await ctx.reply(withFooter(message), {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   }

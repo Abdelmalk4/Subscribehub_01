@@ -181,7 +181,7 @@ async function triggerPostPaymentActions(invoiceId: number) {
                 mainBot, 
                 Number(client.telegram_user_id), 
                 `✅ *Payment Received*\n\nYour platform subscription has been activated! Thank you for choosing ${PLATFORM.NAME}.\n\nUse /subscription to view your status.`, 
-                { parse_mode: 'Markdown' }
+                { parse_mode: 'HTML' }
             );
             
             logger.info({ clientId: client.id }, 'Client notified of platform payment');

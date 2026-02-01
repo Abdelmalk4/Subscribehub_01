@@ -208,7 +208,7 @@ async function showPendingApprovals(ctx: MainBotContext) {
     const keyboard = new InlineKeyboard().text('« Back', 'start');
     await ctx.reply(
       withFooter('✅ No pending approvals!'),
-      { parse_mode: 'Markdown', reply_markup: keyboard }
+      { parse_mode: 'HTML', reply_markup: keyboard }
     );
     return;
   }
@@ -301,7 +301,7 @@ async function showPlatformStats(ctx: MainBotContext) {
 async function showClientDetails(ctx: MainBotContext, clientId: string) {
   const { data, error } = await supabase
     .from('clients')
-    .select('*, selling_bots(id, bot_username, status), subscription_plans(*)')
+    .select('*, selling_bots(id, bot_username, status, linked_channel_username, linked_channel_id), subscription_plans(*)')
     .eq('id', clientId)
     .single();
 
@@ -323,7 +323,15 @@ async function showClientDetails(ctx: MainBotContext, clientId: string) {
   keyboard.row().text('« Back to Clients', 'admin_clients');
 
   const botsInfo = client.selling_bots && client.selling_bots.length > 0
-    ? client.selling_bots.map((b) => `  • @${escapeHtml(b.bot_username || 'Unknown')} (${b.status})`).join('\n')
+    ? client.selling_bots.map((b) => {
+        const linked = b.linked_channel_username 
+          ? `\n    └ Linked: @${escapeHtml(b.linked_channel_username)}`
+          : b.linked_channel_id 
+            ? `\n    └ Linked ID: ${b.linked_channel_id}`
+            : '\n    └ ⚠️ Not Linked';
+            
+        return `  • @${escapeHtml(b.bot_username || 'Unknown')} (${b.status})${linked}`;
+      }).join('\n')
     : '  None';
 
   const message = `

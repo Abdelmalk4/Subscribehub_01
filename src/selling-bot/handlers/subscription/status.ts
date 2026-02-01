@@ -5,7 +5,7 @@
 
 import { Bot, InlineKeyboard } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
-import { withFooter, formatDate, daysUntil, getRelativeTime } from '../../../shared/utils/index.js';
+import { withFooter, formatDate, daysUntil, getRelativeTime, MessageBuilder } from '../../../shared/utils/index.js';
 
 export function setupStatusHandler(bot: Bot<SellingBotContext>) {
   bot.command('status', async (ctx) => {
@@ -38,15 +38,15 @@ async function showStatus(ctx: SellingBotContext) {
       .row()
       .text('« Back', 'start');
 
-    const message = `
-📊 <b>Your Subscription</b>
-
-✅ <b>Status:</b> Active
-📅 <b>Expires:</b> ${expiresOn}
-⏱️ <b>Time Left:</b> ${relativeTime}
-
-${daysLeft <= 3 ? '⚠️ <b>Your subscription is expiring soon!</b>\n' : ''}
-`;
+    const message = new MessageBuilder()
+      .header('📊', 'Your Subscription')
+      .break()
+      .field('Status', '✅ Active')
+      .field('Expires', expiresOn)
+      .field('Time Left', relativeTime)
+      .break()
+      .raw(daysLeft <= 3 ? '⚠️ <b>Your subscription is expiring soon!</b>\n' : '')
+      .toString();
 
     await ctx.reply(withFooter(message), {
       parse_mode: 'HTML',
@@ -58,13 +58,13 @@ ${daysLeft <= 3 ? '⚠️ <b>Your subscription is expiring soon!</b>\n' : ''}
       .row()
       .text('« Back', 'start');
 
-    const message = `
-📊 <b>Your Subscription</b>
-
-⚠️ <b>Status:</b> Expired
-
-Your subscription has expired. Subscribe now to regain access!
-`;
+    const message = new MessageBuilder()
+      .header('📊', 'Your Subscription')
+      .break()
+      .field('Status', '⚠️ Expired')
+      .break()
+      .line('Your subscription has expired. Subscribe now to regain access!')
+      .toString();
 
     await ctx.reply(withFooter(message), {
       parse_mode: 'HTML',
@@ -73,13 +73,13 @@ Your subscription has expired. Subscribe now to regain access!
   } else if (subscriber.subscriptionStatus === 'REVOKED') {
     keyboard.text('❓ Contact Support', 'help');
 
-    const message = `
-📊 <b>Your Subscription</b>
-
-🚫 <b>Status:</b> Access Revoked
-
-Your access has been revoked. Please contact support for assistance.
-`;
+    const message = new MessageBuilder()
+      .header('📊', 'Your Subscription')
+      .break()
+      .field('Status', '🚫 Access Revoked')
+      .break()
+      .line('Your access has been revoked. Please contact support for assistance.')
+      .toString();
 
     await ctx.reply(withFooter(message), {
       parse_mode: 'HTML',
@@ -92,14 +92,14 @@ Your access has been revoked. Please contact support for assistance.
       .row()
       .text('« Back', 'start');
 
-    const message = `
-📊 <b>Your Subscription</b>
-
-⏳ <b>Status:</b> No Active Subscription
-
-You don't have an active subscription yet.
-Choose a plan to get started!
-`;
+    const message = new MessageBuilder()
+      .header('📊', 'Your Subscription')
+      .break()
+      .field('Status', '⏳ No Active Subscription')
+      .break()
+      .line("You don't have an active subscription yet.")
+      .line('Choose a plan to get started!')
+      .toString();
 
     await ctx.reply(withFooter(message), {
       parse_mode: 'HTML',

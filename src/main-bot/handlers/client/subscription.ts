@@ -8,7 +8,7 @@ import type { MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type Client, type SubscriptionPlan } from '../../../database/index.js';
 import { createInvoice } from '../../../shared/integrations/nowpayments.js';
 import { config, PLATFORM } from '../../../shared/config/index.js';
-import { withFooter, formatDate, formatPrice, formatDuration, daysUntil, addDays } from '../../../shared/utils/index.js';
+import { withFooter, formatDate, formatPrice, formatDuration, daysUntil, addDays, MessageBuilder } from '../../../shared/utils/index.js';
 import { mainBotLogger as logger } from '../../../shared/utils/index.js';
 import { clientOnly } from '../../middleware/client.js';
 
@@ -58,17 +58,17 @@ async function showSubscriptionStatus(ctx: MainBotContext) {
     keyboard.text('🚀 Upgrade Now', 'platform_plans').row();
     keyboard.text('« Back', 'start');
 
-    const message = `
-💳 <b>Your Subscription</b>
+    const message = new MessageBuilder()
+      .header('💳', 'Your Subscription')
+      .break()
+      .field('Status', '🆓 Free Trial')
+      .field('Days Remaining', daysLeft.toString())
+      .field('Trial Ends', fullClient.trial_end_date ? formatDate(new Date(fullClient.trial_end_date)) : 'N/A')
+      .break()
+      .line('Upgrade now to ensure uninterrupted service!')
+      .toString();
 
-<b>Status:</b> 🆓 Free Trial
-<b>Days Remaining:</b> ${daysLeft}
-<b>Trial Ends:</b> ${fullClient.trial_end_date ? formatDate(new Date(fullClient.trial_end_date)) : 'N/A'}
-
-Upgrade now to ensure uninterrupted service!
-`;
-
-    await ctx.reply(withFooter(message), {
+    await ctx.reply(message, {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
@@ -82,18 +82,25 @@ Upgrade now to ensure uninterrupted service!
     keyboard.text('📋 Change Plan', 'platform_plans').row();
     keyboard.text('« Back', 'start');
 
-    const message = `
-💳 <b>Your Subscription</b>
+    const message = new MessageBuilder()
+      .header('💳', 'Your Subscription')
+      .break()
+      .field('Status', '✅ Active')
+      .field('Plan', plan?.name || 'Unknown')
+      .field('Renews', fullClient.platform_subscription_end ? formatDate(new Date(fullClient.platform_subscription_end)) : 'N/A')
+      .field('Days Left', daysLeft.toString())
+      .break();
 
-<b>Status:</b> ✅ Active
-<b>Plan:</b> ${plan?.name || 'Unknown'}
-<b>Renews:</b> ${fullClient.platform_subscription_end ? formatDate(new Date(fullClient.platform_subscription_end)) : 'N/A'}
-<b>Days Left:</b> ${daysLeft}
+    if (plan) {
+      message
+        .header('📝', 'Plan Limits')
+        .list([
+          `Max Bots: ${plan.max_bots || 'Unlimited'}`,
+          `Max Subscribers/Bot: ${plan.max_subscribers || 'Unlimited'}`
+        ]);
+    }
 
-${plan ? `<b>Plan Limits:</b>\n• Max Bots: ${plan.max_bots || 'Unlimited'}\n• Max Subscribers/Bot: ${plan.max_subscribers || 'Unlimited'}` : ''}
-`;
-
-    await ctx.reply(withFooter(message), {
+    await ctx.reply(message.toString(), {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
@@ -101,26 +108,29 @@ ${plan ? `<b>Plan Limits:</b>\n• Max Bots: ${plan.max_bots || 'Unlimited'}\n�
     keyboard.text('🚀 Reactivate Now', 'platform_plans').row();
     keyboard.text('« Back', 'start');
 
-    const message = `
-💳 <b>Your Subscription</b>
+    const message = new MessageBuilder()
+      .header('💳', 'Your Subscription')
+      .break()
+      .field('Status', '⚠️ Expired')
+      .break()
+      .line('Your subscription has expired. Your selling bots are paused.')
+      .break()
+      .line('Reactivate now to resume service!')
+      .toString();
 
-<b>Status:</b> ⚠️ Expired
-
-Your subscription has expired. Your selling bots are paused.
-
-Reactivate now to resume service!
-`;
-
-    await ctx.reply(withFooter(message), {
+    await ctx.reply(message, {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } else {
     keyboard.text('« Back', 'start');
-    await ctx.reply(
-      withFooter(`💳 <b>Your Subscription</b>\n\n<b>Status:</b> ${fullClient.status}`),
-      { parse_mode: 'HTML', reply_markup: keyboard }
-    );
+    const message = new MessageBuilder()
+      .header('💳', 'Your Subscription')
+      .break()
+      .field('Status', fullClient.status)
+      .toString();
+
+    await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
   }
 }
 
@@ -141,15 +151,18 @@ async function showPlatformPlans(ctx: MainBotContext) {
 
   const keyboard = new InlineKeyboard();
 
-  let message = '📋 <b>Platform Subscription Plans</b>\n\n';
+  const mb = new MessageBuilder()
+    .header('📋', 'Platform Subscription Plans')
+    .break();
 
   for (const plan of plans) {
-    message += `<b>${plan.name}</b>\n`;
-    message += `💰 ${formatPrice(Number(plan.price_amount), plan.price_currency)} / ${formatDuration(plan.duration_days)}\n`;
-    if (plan.max_bots) message += `🤖 Up to ${plan.max_bots} bots\n`;
-    if (plan.max_subscribers) message += `👥 Up to ${plan.max_subscribers} subscribers/bot\n`;
-    if (plan.description) message += `📝 ${plan.description}\n`;
-    message += '\n';
+    mb.header('🔹', plan.name)
+      .line(`💰 ${formatPrice(Number(plan.price_amount), plan.price_currency)} / ${formatDuration(plan.duration_days)}`);
+    
+    if (plan.max_bots) mb.list([`max ${plan.max_bots} bots`], '🤖');
+    if (plan.max_subscribers) mb.list([`max ${plan.max_subscribers} subscribers/bot`], '👥');
+    if (plan.description) mb.info(plan.description);
+    mb.break();
 
     keyboard.text(
       `${plan.name} - ${formatPrice(Number(plan.price_amount), plan.price_currency)}`,
@@ -159,7 +172,7 @@ async function showPlatformPlans(ctx: MainBotContext) {
 
   keyboard.text('« Back', 'subscription');
 
-  await ctx.reply(withFooter(message), {
+  await ctx.reply(mb.toString(), {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });
@@ -224,19 +237,19 @@ async function createPlatformInvoice(ctx: MainBotContext, planId: string) {
       .row()
       .text('« Back to Plans', 'platform_plans');
 
-    const message = `
-💳 <b>Payment for ${plan.name}</b>
+    const message = new MessageBuilder()
+      .header('💳', `Payment for ${plan.name}`)
+      .break()
+      .field('Amount', formatPrice(Number(plan.price_amount), plan.price_currency))
+      .field('Duration', formatDuration(plan.duration_days))
+      .break()
+      .line('Click the button below to pay securely via NOWPayments.')
+      .line('You will be redirected to a hosted checkout page.')
+      .break()
+      .info(`Invoice expires in ${PLATFORM.INVOICE_EXPIRATION_MINUTES} minutes.`)
+      .toString();
 
-<b>Amount:</b> ${formatPrice(Number(plan.price_amount), plan.price_currency)}
-<b>Duration:</b> ${formatDuration(plan.duration_days)}
-
-Click the button below to pay securely via NOWPayments.
-You will be redirected to a hosted checkout page.
-
-<i>Invoice expires in ${PLATFORM.INVOICE_EXPIRATION_MINUTES} minutes.</i>
-`;
-
-    await ctx.reply(withFooter(message), {
+    await ctx.reply(message, {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });

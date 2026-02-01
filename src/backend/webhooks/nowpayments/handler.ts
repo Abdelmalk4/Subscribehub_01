@@ -6,7 +6,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { supabase, type PaymentTransaction, type SubscriptionPlan, type Subscriber, type Client, type SellingBot } from '../../../database/index.js';
 import { validateWebhookSignature, mapPaymentStatus } from '../../../shared/integrations/nowpayments.js';
-import { webhookLogger as logger } from '../../../shared/utils/index.js';
+import { webhookLogger as logger, MessageBuilder } from '../../../shared/utils/index.js';
 import { config } from '../../../shared/config/index.js';
 import { grantChannelAccess } from '../../services/access-control/index.js';
 import { addDays } from '../../../shared/utils/date.js';
@@ -177,10 +177,19 @@ async function triggerPostPaymentActions(invoiceId: number) {
             // Use fresh bot instance to avoid context issues
             const mainBot = new Bot(config.MAIN_BOT_TOKEN);
             
+            const message = new MessageBuilder()
+                .header('✅', 'Payment Received')
+                .break()
+                .line('Your platform subscription has been activated!')
+                .line(`Thank you for choosing ${PLATFORM.NAME}.`)
+                .break()
+                .line('Use /subscription to view your status.')
+                .toString();
+
             await safeSendMessage(
                 mainBot, 
                 Number(client.telegram_user_id), 
-                `✅ *Payment Received*\n\nYour platform subscription has been activated! Thank you for choosing ${PLATFORM.NAME}.\n\nUse /subscription to view your status.`, 
+                message, 
                 { parse_mode: 'HTML' }
             );
             

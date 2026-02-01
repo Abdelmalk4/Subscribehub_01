@@ -5,7 +5,7 @@
 
 import { Bot, InlineKeyboard } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
-import { withFooter, escapeHtml } from '../../../shared/utils/index.js';
+import { withFooter, escapeHtml, MessageBuilder } from '../../../shared/utils/index.js';
 
 export function setupHelpHandler(bot: Bot<SellingBotContext>) {
   bot.command('help', async (ctx) => {
@@ -28,25 +28,29 @@ async function showHelp(ctx: SellingBotContext) {
     .row()
     .text('« Back to Menu', 'start');
 
-  const message = `
-❓ <b>Help & Support</b>
+  const message = new MessageBuilder()
+    .header('❓', 'Help & Support')
+    .break()
+    .line('<b>Common Commands:</b>')
+    .list([
+      '/start - Main menu',
+      '/plans - View subscription plans',
+      '/status - Check your subscription',
+      '/help - This help message'
+    ], '')
+    .break()
+    .line('<b>Payment Issues:</b>')
+    .list([
+      'Payments are processed via NOWPayments',
+      'Confirmations usually take 1-10 minutes',
+      'Make sure to send the exact amount'
+    ])
+    .break()
+    .line('<b>Need more help?</b>')
+    .line(channelUsername ? `Contact: @${escapeHtml(channelUsername)}` : 'Contact the channel owner')
+    .toString();
 
-<b>Common Commands:</b>
-/start - Main menu
-/plans - View subscription plans
-/status - Check your subscription
-/help - This help message
-
-<b>Payment Issues:</b>
-• Payments are processed via NOWPayments
-• Confirmations usually take 1-10 minutes
-• Make sure to send the exact amount
-
-<b>Need more help?</b>
-${channelUsername ? `Contact: @${escapeHtml(channelUsername)}` : 'Contact the channel owner'}
-`;
-
-  await ctx.reply(withFooter(message), {
+  await ctx.reply(message, {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });

@@ -6,7 +6,7 @@
 import { Bot } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
 import { supabase, type Subscriber } from '../../../database/index.js';
-import { sellingBotLogger as logger } from '../../../shared/utils/index.js';
+import { sellingBotLogger as logger, MessageBuilder } from '../../../shared/utils/index.js';
 import { handleJoinRequest as performAccessControlCheck } from '../../../backend/services/access-control/index.js';
 
 export function setupJoinRequestHandler(bot: Bot<SellingBotContext>) {
@@ -51,10 +51,16 @@ export function setupJoinRequestHandler(bot: Bot<SellingBotContext>) {
         // Decline and message user
         try {
           await ctx.api.declineChatJoinRequest(channelId, userId);
-          await ctx.api.sendMessage(
-            userId,
-            '❌ You need to subscribe first before joining the channel.\n\nUse /plans to view subscription options.'
-          );
+          
+          const message = new MessageBuilder()
+            .header('❌', 'Subscription Required')
+            .break()
+            .line('You need to subscribe first before joining the channel.')
+            .break()
+            .line('Use /plans to view subscription options.')
+            .toString();
+
+          await ctx.api.sendMessage(userId, message, { parse_mode: 'HTML' });
         } catch (e) {
           logger.error({ error: e }, 'Failed to decline join request');
         }

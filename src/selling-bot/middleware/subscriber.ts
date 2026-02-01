@@ -5,7 +5,7 @@
 
 import { Middleware } from 'grammy';
 import { supabase, type Subscriber } from '../../database/index.js';
-import { sellingBotLogger as logger } from '../../shared/utils/index.js';
+import { sellingBotLogger as logger, MessageBuilder } from '../../shared/utils/index.js';
 import type { SellingBotContext } from '../../shared/types/index.js';
 
 export function setupSubscriberMiddleware(): Middleware<SellingBotContext> {
@@ -64,10 +64,14 @@ export function setupSubscriberMiddleware(): Middleware<SellingBotContext> {
               
               if (currentSubCount !== null && currentSubCount >= maxSubscribers) {
                 logger.warn({ botId, currentSubCount, maxSubscribers }, 'Subscriber limit reached');
-                await ctx.reply(
-                  '❌ This bot has reached its subscriber limit.\n\n' +
-                  'Please contact the owner for assistance.'
-                );
+                const message = new MessageBuilder()
+                  .header('❌', 'Subscriber Limit Reached')
+                  .break()
+                  .line('This bot has reached its subscriber limit.')
+                  .line('Please contact the owner for assistance.')
+                  .toString();
+
+                await ctx.reply(message, { parse_mode: 'HTML' });
                 return;
               }
             }
@@ -130,10 +134,14 @@ export function setupSubscriberMiddleware(): Middleware<SellingBotContext> {
 export function activeSubscriberOnly(): Middleware<SellingBotContext> {
   return async (ctx, next) => {
     if (!ctx.subscriber || ctx.subscriber.subscriptionStatus !== 'ACTIVE') {
-      await ctx.reply(
-        '❌ You need an active subscription to access this.\n\n' +
-        'Use /plans to view available subscription options.'
-      );
+      const message = new MessageBuilder()
+        .header('❌', 'Active Subscription Required')
+        .break()
+        .line('You need an active subscription to access this.')
+        .line('Use /plans to view available subscription options.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML' });
       return;
     }
     await next();

@@ -5,7 +5,7 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type Client } from '../../../database/index.js';
-import { withFooter, escapeHtml } from '../../../shared/utils/index.js';
+import { withFooter, escapeHtml, MessageBuilder } from '../../../shared/utils/index.js';
 import { mainBotLogger as logger } from '../../../shared/utils/index.js';
 import { clientOnly } from '../../middleware/client.js';
 
@@ -24,28 +24,32 @@ export function setupSettingsHandler(bot: Bot<MainBotContext>) {
   bot.callbackQuery('edit_business_name', clientOnly(), async (ctx) => {
     await ctx.answerCallbackQuery();
     (ctx.session as any).editingField = 'business_name';
-    await ctx.reply(withFooter(`
-✏️ <b>Edit Business Name</b>
+    const message = new MessageBuilder()
+      .header('✏️', 'Edit Business Name')
+      .break()
+      .line('Send your new business name:')
+      .break()
+      .info(`Current: ${ctx.client?.businessName || ''}`)
+      .break()
+      .line('Or send /cancel to go back.')
+      .toString();
 
-Send your new business name:
-
-<i>Current: ${escapeHtml(ctx.client?.businessName || '')}</i>
-
-Or send /cancel to go back.
-    `), { parse_mode: 'HTML' });
+    await ctx.reply(message, { parse_mode: 'HTML' });
   });
 
   // Edit Email - prompt
   bot.callbackQuery('edit_email', clientOnly(), async (ctx) => {
     await ctx.answerCallbackQuery();
     (ctx.session as any).editingField = 'email';
-    await ctx.reply(withFooter(`
-📧 <b>Edit Contact Email</b>
+    const message = new MessageBuilder()
+      .header('📧', 'Edit Contact Email')
+      .break()
+      .line('Send your new email address:')
+      .break()
+      .line('Or send /cancel to go back.')
+      .toString();
 
-Send your new email address:
-
-Or send /cancel to go back.
-    `), { parse_mode: 'HTML' });
+    await ctx.reply(message, { parse_mode: 'HTML' });
   });
 
   // Notification settings
@@ -57,17 +61,21 @@ Or send /cancel to go back.
       .row()
       .text('« Back to Settings', 'settings');
 
-    await ctx.reply(withFooter(`
-🔔 <b>Notification Settings</b>
+    const message = new MessageBuilder()
+      .header('🔔', 'Notification Settings')
+      .break()
+      .line('Configure when you receive notifications:')
+      .break()
+      .list([
+        '<b>New Subscribers</b> - When someone subscribes',
+        '<b>Payments</b> - When payments are confirmed',
+        '<b>Expirations</b> - When subscriptions expire'
+      ])
+      .break()
+      .info('Feature coming soon!')
+      .toString();
 
-Configure when you receive notifications:
-
-• <b>New Subscribers</b> - When someone subscribes
-• <b>Payments</b> - When payments are confirmed
-• <b>Expirations</b> - When subscriptions expire
-
-<i>Feature coming soon!</i>
-    `), { parse_mode: 'HTML', reply_markup: keyboard });
+    await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
   });
 
   // Handle text input for editing fields
@@ -149,16 +157,18 @@ async function showSettings(ctx: MainBotContext) {
     .row()
     .text('« Back', 'start');
 
-  await ctx.reply(withFooter(`
-⚙️ <b>Account Settings</b>
+  const message = new MessageBuilder()
+    .header('⚙️', 'Account Settings')
+    .break()
+    .field('Business Name', freshClient?.business_name || client.businessName)
+    .field('Email', freshClient?.contact_email || 'Not set')
+    .field('Username', freshClient?.username ? `@${freshClient.username}` : 'Not set')
+    .field('Status', freshClient?.status || client.status)
+    .break()
+    .line('Select an option to edit:')
+    .toString();
 
-<b>Business Name:</b> ${escapeHtml(freshClient?.business_name || client.businessName)}
-<b>Email:</b> ${escapeHtml(freshClient?.contact_email || 'Not set')}
-<b>Username:</b> ${freshClient?.username ? `@${escapeHtml(freshClient.username)}` : 'Not set'}
-<b>Status:</b> ${freshClient?.status || client.status}
-
-Select an option to edit:
-  `), {
+  await ctx.reply(message, {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });

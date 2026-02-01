@@ -5,7 +5,7 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
 import { supabase, type SubscriptionPlan } from '../../../database/index.js';
-import { withFooter, formatPlanButton, formatDuration, formatPrice, escapeHtml } from '../../../shared/utils/index.js';
+import { withFooter, formatPlanButton, formatDuration, formatPrice, escapeHtml, MessageBuilder } from '../../../shared/utils/index.js';
 import { sellingBotLogger as logger } from '../../../shared/utils/index.js';
 
 export function setupPlansHandler(bot: Bot<SellingBotContext>) {
@@ -40,10 +40,13 @@ async function showPlans(ctx: SellingBotContext) {
     const plans = data as SubscriptionPlan[] | null;
 
     if (!plans || plans.length === 0) {
-      await ctx.reply(
-        withFooter('📋 <b>No Plans Available</b>\n\nThere are currently no subscription plans available.'),
-        { parse_mode: 'HTML' }
-      );
+      const message = new MessageBuilder()
+        .header('📋', 'No Plans Available')
+        .break()
+        .line('There are currently no subscription plans available.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML' });
       return;
     }
 
@@ -56,18 +59,23 @@ async function showPlans(ctx: SellingBotContext) {
 
     keyboard.text('« Back', 'start');
 
-    let message = '📋 <b>Available Subscription Plans</b>\n\n';
+    const mb = new MessageBuilder()
+      .header('📋', 'Available Subscription Plans')
+      .break();
     
     for (const plan of plans) {
-      message += `<b>${escapeHtml(plan.name)}</b>\n`;
-      message += `💰 ${formatPrice(plan.price_amount, plan.price_currency)} for ${formatDuration(plan.duration_days)}\n`;
-      if (plan.description) message += `📝 ${escapeHtml(plan.description)}\n`;
-      message += '\n';
+      mb.raw(`<b>${escapeHtml(plan.name)}</b>\n`)
+        .line(`💰 ${formatPrice(plan.price_amount, plan.price_currency)} for ${formatDuration(plan.duration_days)}`);
+      
+      if (plan.description) {
+        mb.info(plan.description);
+      }
+      mb.break();
     }
 
-    message += 'Select a plan to subscribe:';
+    mb.line('Select a plan to subscribe:');
 
-    await ctx.reply(withFooter(message), {
+    await ctx.reply(mb.toString(), {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
@@ -102,17 +110,21 @@ async function selectPlan(ctx: SellingBotContext, planId: string) {
       .row()
       .text('« Back to Plans', 'plans');
 
-    const message = `
-📋 <b>Plan Selected</b>
+    const mb = new MessageBuilder()
+      .header('📋', 'Plan Selected')
+      .break()
+      .raw(`<b>${escapeHtml(plan.name)}</b>\n`)
+      .line(`💰 ${formatPrice(plan.price_amount, plan.price_currency)}`)
+      .line(`📅 Duration: ${formatDuration(plan.duration_days)}`);
 
-<b>${escapeHtml(plan.name)}</b>
-💰 ${formatPrice(plan.price_amount, plan.price_currency)}
-📅 Duration: ${formatDuration(plan.duration_days)}
-${plan.description ? `📝 ${escapeHtml(plan.description)}\n` : ''}
-Click "Pay Now" to generate a payment invoice.
-`;
+    if (plan.description) {
+      mb.info(plan.description);
+      mb.break();
+    }
+    
+    mb.line('Click "Pay Now" to generate a payment invoice.');
 
-    await ctx.reply(withFooter(message), {
+    await ctx.reply(mb.toString(), {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });

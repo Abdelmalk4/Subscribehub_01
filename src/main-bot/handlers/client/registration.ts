@@ -6,7 +6,7 @@
 import { InlineKeyboard } from 'grammy';
 import type { MainBotConversation, MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type Client } from '../../../database/index.js';
-import { mainBotLogger as logger } from '../../../shared/utils/index.js';
+import { mainBotLogger as logger, MessageBuilder } from '../../../shared/utils/index.js';
 import { withFooter, escapeHtml } from '../../../shared/utils/format.js';
 
 export async function registrationConversation(
@@ -17,12 +17,15 @@ export async function registrationConversation(
   const username = ctx.from!.username;
 
   // Step 1: Business Name
-  await ctx.reply(
-    '📝 <b>Step 1/4: Business Name</b>\n\n' +
-    'What is the name of your business or channel?\n\n' +
-    '<i>Example: "Premium Signals VIP"</i>',
-    { parse_mode: 'HTML' }
-  );
+  const step1Message = new MessageBuilder()
+    .header('📝', 'Step 1/4: Business Name')
+    .break()
+    .line('What is the name of your business or channel?')
+    .break()
+    .info('Example: "Premium Signals VIP"')
+    .toString();
+
+  await ctx.reply(step1Message, { parse_mode: 'HTML' });
 
   const businessNameCtx = await conversation.waitFor('message:text');
   const businessName = businessNameCtx.message.text.trim();
@@ -33,24 +36,30 @@ export async function registrationConversation(
   }
 
   // Step 2: Channel Username
-  await ctx.reply(
-    '📝 <b>Step 2/4: Channel Username</b>\n\n' +
-    'What is your Telegram channel username?\n\n' +
-    '<i>Example: @premiumsignals or premiumsignals</i>',
-    { parse_mode: 'HTML' }
-  );
+  const step2Message = new MessageBuilder()
+    .header('📝', 'Step 2/4: Channel Username')
+    .break()
+    .line('What is your Telegram channel username?')
+    .break()
+    .info('Example: @premiumsignals or premiumsignals')
+    .toString();
+
+  await ctx.reply(step2Message, { parse_mode: 'HTML' });
 
   const channelCtx = await conversation.waitFor('message:text');
   let channelUsername = channelCtx.message.text.trim();
   channelUsername = channelUsername.replace(/^@/, '').replace(/^https?:\/\/t\.me\//, '');
 
   // Step 3: Email (Optional)
-  await ctx.reply(
-    '📝 <b>Step 3/4: Contact Email (Optional)</b>\n\n' +
-    'Enter your email address for important notifications, or send /skip to skip.\n\n' +
-    '<i>Your email will be kept private.</i>',
-    { parse_mode: 'HTML' }
-  );
+  const step3Message = new MessageBuilder()
+    .header('📝', 'Step 3/4: Contact Email (Optional)')
+    .break()
+    .line('Enter your email address for important notifications, or send /skip to skip.')
+    .break()
+    .info('Your email will be kept private.')
+    .toString();
+
+  await ctx.reply(step3Message, { parse_mode: 'HTML' });
 
   const emailCtx = await conversation.waitFor('message:text');
   let contactEmail: string | null = null;
@@ -70,17 +79,20 @@ export async function registrationConversation(
     .row()
     .text('❌ Cancel', 'cancel_registration');
 
-  await ctx.reply(
-    '📋 <b>Step 4/4: Confirm Registration</b>\n\n' +
-    `<b>Business Name:</b> ${escapeHtml(businessName)}\n` +
-    `<b>Channel:</b> @${escapeHtml(channelUsername)}\n` +
-    `<b>Email:</b> ${escapeHtml(contactEmail || 'Not provided')}\n\n` +
-    'Is this information correct?',
-    {
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
-    }
-  );
+  const confirmMessage = new MessageBuilder()
+    .header('📋', 'Step 4/4: Confirm Registration')
+    .break()
+    .field('Business Name', businessName)
+    .field('Channel', `@${channelUsername}`)
+    .field('Email', contactEmail || 'Not provided')
+    .break()
+    .line('Is this information correct?')
+    .toString();
+
+  await ctx.reply(confirmMessage, {
+    parse_mode: 'HTML',
+    reply_markup: keyboard,
+  });
 
   const confirmCtx = await conversation.waitForCallbackQuery(['confirm_registration', 'cancel_registration']);
 
@@ -113,15 +125,16 @@ export async function registrationConversation(
 
     logger.info({ clientId: client.id, userId }, 'New client registered');
 
-    await ctx.reply(
-      withFooter(
-        '🎉 <b>Registration Successful!</b>\n\n' +
-        'Your account has been created and is pending approval.\n\n' +
-        'You will receive a notification once your account is verified.\n\n' +
-        '<i>This usually takes 1-2 hours during business hours.</i>'
-      ),
-      { parse_mode: 'HTML' }
-    );
+    const successMessage = new MessageBuilder()
+      .header('🎉', 'Registration Successful!')
+      .break()
+      .line('Your account has been created and is pending approval.')
+      .line('You will receive a notification once your account is verified.')
+      .break()
+      .info('This usually takes 1-2 hours during business hours.')
+      .toString();
+
+    await ctx.reply(successMessage, { parse_mode: 'HTML' });
   } catch (error) {
     logger.error({ error, userId }, 'Failed to create client');
     await ctx.reply(

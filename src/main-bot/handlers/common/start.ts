@@ -6,7 +6,7 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
 import { PLATFORM } from '../../../shared/config/index.js';
-import { withFooter, formatDate, daysUntil, escapeHtml } from '../../../shared/utils/index.js';
+import { withFooter, formatDate, daysUntil, escapeHtml, MessageBuilder } from '../../../shared/utils/index.js';
 
 export function setupStartCommand(bot: Bot<MainBotContext>) {
   bot.command('start', async (ctx) => {
@@ -51,20 +51,24 @@ export function setupStartCommand(bot: Bot<MainBotContext>) {
       .row()
       .text('« Back', 'start');
 
-    await ctx.reply(withFooter(`
-📖 <b>About ${PLATFORM.NAME}</b>
+    const message = new MessageBuilder()
+      .header('📖', `About ${PLATFORM.NAME}`)
+      .break()
+      .line('We help Telegram channel owners monetize their content with automatic subscription management.')
+      .break()
+      .field('Features', '')
+      .list([
+        'Create white-label subscription bots',
+        'Accept crypto payments via NOWPayments',
+        'Automatic channel access control',
+        'Real-time analytics',
+        '7-day free trial'
+      ])
+      .break()
+      .line('Ready to start? Click "Register Now" below!')
+      .toString();
 
-We help Telegram channel owners monetize their content with automatic subscription management.
-
-<b>Features:</b>
-• Create white-label subscription bots
-• Accept crypto payments via NOWPayments
-• Automatic channel access control
-• Real-time analytics
-• 7-day free trial
-
-Ready to start? Click "Register Now" below!
-    `), { parse_mode: 'HTML', reply_markup: keyboard });
+    await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
   });
 }
 
@@ -74,20 +78,22 @@ async function showWelcome(ctx: MainBotContext, firstName: string) {
     .row()
     .text('📖 Learn More', 'learn_more');
 
-  const message = `
-👋 <b>Welcome to ${PLATFORM.NAME}, ${escapeHtml(firstName)}!</b>
-
-Automate your Telegram channel subscriptions with crypto payments.
-
-✨ <b>What you get:</b>
-• Automated subscriber management
-• Crypto payments via NOWPayments
-• White-label selling bots
-• Real-time analytics
-• 7-day free trial
-
-Ready to get started?
-`;
+  const message = new MessageBuilder()
+    .header('👋', `Welcome to ${PLATFORM.NAME}, ${firstName}!`)
+    .break()
+    .line('Automate your Telegram channel subscriptions with crypto payments.')
+    .break()
+    .header('✨', 'What you get')
+    .list([
+      'Automated subscriber management',
+      'Crypto payments via NOWPayments',
+      'White-label selling bots',
+      'Real-time analytics',
+      '7-day free trial'
+    ])
+    .break()
+    .line('Ready to get started?')
+    .toString();
 
   await ctx.reply(withFooter(message), {
     parse_mode: 'HTML',
@@ -101,13 +107,13 @@ async function showClientDashboard(ctx: MainBotContext, firstName: string) {
 
   // Status-specific actions
   if (client.status === 'PENDING') {
-    const message = `
-👋 <b>Welcome back, ${escapeHtml(firstName)}!</b>
-
-📋 <b>Account Status:</b> ⏳ Pending Approval
-
-Your registration is being reviewed. You'll receive a notification once approved.
-`;
+    const message = new MessageBuilder()
+      .header('👋', `Welcome back, ${firstName}!`)
+      .break()
+      .field('Account Status', '⏳ Pending Approval')
+      .break()
+      .line("Your registration is being reviewed. You'll receive a notification once approved.")
+      .toString();
     await ctx.reply(withFooter(message), { parse_mode: 'HTML' });
     return;
   }
@@ -137,14 +143,14 @@ Your registration is being reviewed. You'll receive a notification once approved
     keyboard.row().text('🔄 Renew Now', 'renew');
   }
 
-  const message = `
-👋 <b>Welcome back, ${escapeHtml(firstName)}!</b>
-
-🏢 <b>Business:</b> ${escapeHtml(client.businessName)}
-${statusLine}
-
-What would you like to do?
-`;
+  const message = new MessageBuilder()
+    .header('👋', `Welcome back, ${firstName}!`)
+    .break()
+    .field('Business', client.businessName)
+    .raw(statusLine ? `${statusLine}\n` : '')
+    .break()
+    .line('What would you like to do?')
+    .toString();
 
   await ctx.reply(withFooter(message), {
     parse_mode: 'HTML',
@@ -162,13 +168,13 @@ async function showAdminDashboard(ctx: MainBotContext, firstName: string) {
     .row()
     .text('🔍 Search Client', 'admin_search');
 
-  const message = `
-🔐 <b>Admin Dashboard</b>
-
-Welcome back, ${escapeHtml(firstName)}!
-
-You have admin access to the ${PLATFORM.NAME} platform.
-`;
+  const message = new MessageBuilder()
+    .header('🔐', 'Admin Dashboard')
+    .break()
+    .line(`Welcome back, ${firstName}!`)
+    .break()
+    .line(`You have admin access to the ${PLATFORM.NAME} platform.`)
+    .toString();
 
   await ctx.reply(withFooter(message), {
     parse_mode: 'HTML',

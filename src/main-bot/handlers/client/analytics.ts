@@ -5,7 +5,7 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
 import { supabase } from '../../../database/index.js';
-import { withFooter, formatDate, addDays } from '../../../shared/utils/index.js';
+import { withFooter, formatDate, addDays, MessageBuilder } from '../../../shared/utils/index.js';
 import { clientOnly } from '../../middleware/client.js';
 
 export function setupAnalyticsHandler(bot: Bot<MainBotContext>) {
@@ -82,22 +82,30 @@ async function showAnalytics(ctx: MainBotContext) {
     .row()
     .text('« Back', 'start');
 
-  await ctx.reply(withFooter(`
-📊 *Your Analytics*
+  const message = new MessageBuilder()
+    .header('📊', 'Your Analytics')
+    .break()
+    .line('<b>Bots:</b>')
+    .list([
+      `Total: ${totalBots}`,
+      `Active: ${activeBots}`
+    ])
+    .break()
+    .line('<b>Subscribers:</b>')
+    .list([
+      `Total: ${totalSubscribers}`,
+      `Active: ${activeSubscribers}`
+    ])
+    .break()
+    .line('<b>Revenue:</b>')
+    .list([
+      `Total: $${totalRevenue.toFixed(2)} USD`
+    ])
+    .break()
+    .info('Last updated: Just now')
+    .toString();
 
-*Bots:*
-• Total: ${totalBots}
-• Active: ${activeBots}
-
-*Subscribers:*
-• Total: ${totalSubscribers}
-• Active: ${activeSubscribers}
-
-*Revenue:*
-• Total: $${totalRevenue.toFixed(2)} USD
-
-_Last updated: Just now_
-  `), {
+  await ctx.reply(message, {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });
@@ -116,14 +124,22 @@ async function showDetailedReport(ctx: MainBotContext) {
 
   if (!bots || bots.length === 0) {
     const keyboard = new InlineKeyboard().text('« Back to Analytics', 'analytics');
-    await ctx.reply(withFooter('📊 *Detailed Report*\n\nNo bots found. Create a bot first!'), {
+    const message = new MessageBuilder()
+      .header('📊', 'Detailed Report')
+      .break()
+      .line('No bots found. Create a bot first!')
+      .toString();
+
+    await ctx.reply(message, {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
     return;
   }
 
-  let reportMessage = '📊 *Detailed Analytics Report*\n\n';
+  const mb = new MessageBuilder()
+    .header('📊', 'Detailed Analytics Report')
+    .break();
 
   for (const bot of bots) {
     const statusEmoji = bot.status === 'ACTIVE' ? '🟢' : '🔴';
@@ -173,10 +189,13 @@ async function showDetailedReport(ctx: MainBotContext) {
         .reduce((sum, p) => sum + Number(p.amount), 0);
     }
 
-    reportMessage += `${statusEmoji} *@${bot.bot_username}*\n`;
-    reportMessage += `   👥 Subscribers: ${totalSubs || 0} (${activeSubs || 0} active, ${expiredSubs || 0} expired)\n`;
-    reportMessage += `   💰 Total Revenue: $${botRevenue.toFixed(2)}\n`;
-    reportMessage += `   📅 Last 30 Days: $${last30DaysRevenue.toFixed(2)}\n\n`;
+    mb.raw(`${statusEmoji} <b>@${bot.bot_username}</b>\n`)
+      .list([
+        `👥 Subscribers: ${totalSubs || 0} (${activeSubs || 0} active, ${expiredSubs || 0} expired)`,
+        `💰 Total Revenue: $${botRevenue.toFixed(2)}`,
+        `📅 Last 30 Days: $${last30DaysRevenue.toFixed(2)}`
+      ])
+      .break();
   }
 
   const keyboard = new InlineKeyboard()
@@ -184,7 +203,7 @@ async function showDetailedReport(ctx: MainBotContext) {
     .row()
     .text('« Back to Analytics', 'analytics');
 
-  await ctx.reply(withFooter(reportMessage), {
+  await ctx.reply(mb.toString(), {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });

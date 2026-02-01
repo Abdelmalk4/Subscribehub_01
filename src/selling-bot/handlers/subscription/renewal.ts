@@ -6,7 +6,7 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
 import { supabase, type SubscriptionPlan } from '../../../database/index.js';
-import { withFooter, formatDate, formatPrice, daysUntil } from '../../../shared/utils/index.js';
+import { withFooter, formatDate, formatPrice, daysUntil, MessageBuilder } from '../../../shared/utils/index.js';
 import { sellingBotLogger as logger } from '../../../shared/utils/index.js';
 
 export function setupRenewalHandler(bot: Bot<SellingBotContext>) {
@@ -71,16 +71,21 @@ async function showRenewalOptions(ctx: SellingBotContext) {
 
   keyboard.text('« Back', 'start');
 
-  let message = '🔄 *Renew Your Subscription*\n\n';
+  const mb = new MessageBuilder()
+    .header('🔄', 'Renew Your Subscription')
+    .break();
 
   if (isActive && subscriber.subscriptionEndDate) {
     const daysLeft = daysUntil(new Date(subscriber.subscriptionEndDate));
-    message += `*Current Plan:* ${currentPlan?.name || 'N/A'}\n`;
-    message += `*Expires:* ${formatDate(new Date(subscriber.subscriptionEndDate))} (${daysLeft} days)\n\n`;
-    message += '_Renewing now will add to your current subscription._\n\n';
+    mb.field('Current Plan', currentPlan?.name || 'N/A')
+      .field('Expires', `${formatDate(new Date(subscriber.subscriptionEndDate))} (${daysLeft} days)`)
+      .break()
+      .info('Renewing now will add to your current subscription.')
+      .break();
   }
 
-  message += 'Select a plan to renew:';
+  mb.line('Select a plan to renew:');
+  const message = mb.toString();
 
   await ctx.reply(withFooter(message), {
     parse_mode: 'HTML',

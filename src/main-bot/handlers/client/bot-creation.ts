@@ -6,7 +6,7 @@
 import { InlineKeyboard, Bot } from 'grammy';
 import type { MainBotConversation, MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type SellingBot } from '../../../database/index.js';
-import { mainBotLogger as logger, addDays, withFooter, encrypt, escapeHtml } from '../../../shared/utils/index.js';
+import { mainBotLogger as logger, addDays, withFooter, encrypt, escapeHtml, MessageBuilder } from '../../../shared/utils/index.js';
 import { PLATFORM } from '../../../shared/config/index.js';
 
 export async function botCreationConversation(
@@ -36,29 +36,38 @@ export async function botCreationConversation(
         .eq('client_id', client.id);
 
       if (currentBotCount !== null && currentBotCount >= maxBots) {
-        await ctx.reply(
-          `❌ <b>Bot Limit Reached</b>\n\n` +
-          `Your plan allows a maximum of ${maxBots} bots.\n` +
-          `You currently have ${currentBotCount} bots.\n\n` +
-          `Upgrade your plan to create more bots.`,
-          { parse_mode: 'HTML' }
-        );
+        const message = new MessageBuilder()
+          .header('❌', 'Bot Limit Reached')
+          .break()
+          .line(`Your plan allows a maximum of ${maxBots} bots.`)
+          .line(`You currently have ${currentBotCount} bots.`)
+          .break()
+          .line('Upgrade your plan to create more bots.')
+          .toString();
+
+        await ctx.reply(message, { parse_mode: 'HTML' });
         return;
       }
     }
   }
 
   // Step 1: Get Bot Token
-  await ctx.reply(
-    '🤖 <b>Step 1/4: Bot Token</b>\n\n' +
-    'First, create a new bot using @BotFather:\n\n' +
-    '1. Open @BotFather\n' +
-    '2. Send /newbot\n' +
-    '3. Follow the instructions\n' +
-    '4. Copy the API token and paste it here\n\n' +
-    '<i>The token looks like: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz</i>',
-    { parse_mode: 'HTML' }
-  );
+  const step1Message = new MessageBuilder()
+    .header('🤖', 'Step 1/4: Bot Token')
+    .break()
+    .line('First, create a new bot using @BotFather:')
+    .break()
+    .list([
+      'Open @BotFather',
+      'Send /newbot',
+      'Follow the instructions',
+      'Copy the API token and paste it here'
+    ], '1.')
+    .break()
+    .info('The token looks like: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz')
+    .toString();
+
+  await ctx.reply(step1Message, { parse_mode: 'HTML' });
 
   const tokenCtx = await conversation.waitFor('message:text');
   const botToken = tokenCtx.message.text.trim();
@@ -96,16 +105,21 @@ export async function botCreationConversation(
 
 
   // Step 2: NOWPayments API Key
-  await ctx.reply(
-    '💳 <b>Step 2/4: NOWPayments API Key</b>\n\n' +
-    'Enter your NOWPayments API key:\n\n' +
-    '1. Go to nowpayments.io\n' +
-    '2. Create an account or log in\n' +
-    '3. Navigate to API Keys\n' +
-    '4. Create a new API key\n' +
-    '5. Paste it here',
-    { parse_mode: 'HTML' }
-  );
+  const step2Message = new MessageBuilder()
+    .header('💳', 'Step 2/4: NOWPayments API Key')
+    .break()
+    .line('Enter your NOWPayments API key:')
+    .break()
+    .list([
+      'Go to nowpayments.io',
+      'Create an account or log in',
+      'Navigate to API Keys',
+      'Create a new API key',
+      'Paste it here'
+    ], '1.')
+    .toString();
+
+  await ctx.reply(step2Message, { parse_mode: 'HTML' });
 
   const apiKeyCtx = await conversation.waitFor('message:text');
   const nowpaymentsApiKey = apiKeyCtx.message.text.trim();
@@ -116,12 +130,15 @@ export async function botCreationConversation(
   }
 
   // Step 3: Wallet Address
-  await ctx.reply(
-    '💰 <b>Step 3/4: Crypto Wallet Address</b>\n\n' +
-    'Enter your crypto wallet address where payments will be sent:\n\n' +
-    '<i>This is your NOWPayments payout wallet.</i>',
-    { parse_mode: 'HTML' }
-  );
+  const step3Message = new MessageBuilder()
+    .header('💰', 'Step 3/4: Crypto Wallet Address')
+    .break()
+    .line('Enter your crypto wallet address where payments will be sent:')
+    .break()
+    .info('This is your NOWPayments payout wallet.')
+    .toString();
+
+  await ctx.reply(step3Message, { parse_mode: 'HTML' });
 
   const walletCtx = await conversation.waitFor('message:text');
   const cryptoWalletAddress = walletCtx.message.text.trim();
@@ -153,17 +170,20 @@ export async function botCreationConversation(
     .row()
     .text('❌ Cancel', 'cancel_bot_creation');
 
-  await ctx.reply(
-    '📋 <b>Step 4/4: Confirm Bot Creation</b>\n\n' +
-    `<b>Bot:</b> @${escapeHtml(botUsername)}\n` +
-    `<b>Name:</b> ${escapeHtml(botName)}\n` +
-    `<b>Wallet:</b> ${cryptoWalletAddress.slice(0, 10)}...${cryptoWalletAddress.slice(-6)}\n\n` +
-    'Create this Selling Bot?',
-    {
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
-    }
-  );
+  const step4Message = new MessageBuilder()
+    .header('📋', 'Step 4/4: Confirm Bot Creation')
+    .break()
+    .field('Bot', `@${botUsername}`)
+    .field('Name', botName)
+    .field('Wallet', `${cryptoWalletAddress.slice(0, 10)}...${cryptoWalletAddress.slice(-6)}`)
+    .break()
+    .line('Create this Selling Bot?')
+    .toString();
+
+  await ctx.reply(step4Message, {
+    parse_mode: 'HTML',
+    reply_markup: keyboard,
+  });
 
   const confirmCtx = await conversation.waitForCallbackQuery([
     'confirm_bot_creation',
@@ -212,31 +232,39 @@ export async function botCreationConversation(
         })
         .eq('id', client.id);
 
-      await ctx.reply(
-        withFooter(
-          '🎉 <b>Selling Bot Created!</b>\n\n' +
-          `Your bot @${escapeHtml(botUsername)} is now active!\n\n` +
-          `🆓 <b>Your ${PLATFORM.TRIAL_DAYS}-day free trial has started!</b>\n\n` +
-          '<b>Next steps:</b>\n' +
-          '1. Add your bot as admin to your channel\n' +
-          '2. Create subscription plans\n' +
-          '3. Share your bot link with subscribers\n\n' +
-          'Use /mybots to manage your bots.'
-        ),
-        { parse_mode: 'HTML' }
-      );
+      const successMessage = new MessageBuilder()
+        .header('🎉', 'Selling Bot Created!')
+        .break()
+        .line(`Your bot @${escapeHtml(botUsername)} is now active!`)
+        .break()
+        .line(`🆓 <b>Your ${PLATFORM.TRIAL_DAYS}-day free trial has started!</b>`)
+        .break()
+        .line('<b>Next steps:</b>')
+        .list([
+          'Add your bot as admin to your channel',
+          'Create subscription plans',
+          'Share your bot link with subscribers'
+        ], '1.')
+        .break()
+        .line('Use /mybots to manage your bots.')
+        .toString();
+
+      await ctx.reply(successMessage, { parse_mode: 'HTML' });
     } else {
-      await ctx.reply(
-        withFooter(
-          '🎉 <b>Selling Bot Created!</b>\n\n' +
-          `Your bot @${escapeHtml(botUsername)} is now active!\n\n` +
-          '<b>Next steps:</b>\n' +
-          '1. Add your bot as admin to your channel\n' +
-          '2. Create subscription plans\n' +
-          '3. Share your bot link'
-        ),
-        { parse_mode: 'HTML' }
-      );
+      const successMessage = new MessageBuilder()
+        .header('🎉', 'Selling Bot Created!')
+        .break()
+        .line(`Your bot @${escapeHtml(botUsername)} is now active!`)
+        .break()
+        .line('<b>Next steps:</b>')
+        .list([
+          'Add your bot as admin to your channel',
+          'Create subscription plans',
+          'Share your bot link'
+        ], '1.')
+        .toString();
+
+      await ctx.reply(successMessage, { parse_mode: 'HTML' });
     }
 
     logger.info({ botId: bot.id, clientId: client.id, botUsername }, 'Selling bot created');

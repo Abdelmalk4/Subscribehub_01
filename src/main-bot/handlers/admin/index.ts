@@ -5,7 +5,7 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type Client, type SellingBot, type SubscriptionPlan, type Subscriber, type PaymentTransaction } from '../../../database/index.js';
-import { mainBotLogger as logger, withFooter, formatDate, escapeHtml } from '../../../shared/utils/index.js';
+import { mainBotLogger as logger, withFooter, formatDate, escapeHtml, MessageBuilder } from '../../../shared/utils/index.js';
 import { config } from '../../../shared/config/index.js';
 import { adminOnly } from '../../middleware/admin.js';
 
@@ -38,14 +38,18 @@ export function setupAdminHandlers(bot: Bot<MainBotContext>) {
       .row()
       .text('« Back', 'start');
 
-    await ctx.reply(withFooter(`
-⚙️ <b>Platform Settings</b>
+    const message = new MessageBuilder()
+      .header('⚙️', 'Platform Settings')
+      .break()
+      .line('Configure your SubscribeHub platform.')
+      .break()
+      .list([
+        '<b>Platform Plans</b> - Manage subscription plans for clients',
+        '<b>IPN Settings</b> - NOWPayments webhook configuration'
+      ])
+      .toString();
 
-Configure your SubscribeHub platform.
-
-• <b>Platform Plans</b> - Manage subscription plans for clients
-• <b>IPN Settings</b> - NOWPayments webhook configuration
-    `), { parse_mode: 'HTML', reply_markup: keyboard });
+    await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
   });
 
   // Manage Platform Plans
@@ -73,17 +77,22 @@ Configure your SubscribeHub platform.
     
     keyboard.text('« Back to Settings', 'admin_settings');
 
-    const planList = plans && plans.length > 0
-      ? plans.map(p => `• <b>${escapeHtml(p.name)}</b> - $${p.price_amount} / ${p.duration_days} days ${p.is_active ? '✅' : '❌'}`).join('\n')
-      : '<i>No platform plans created yet.</i>';
+    const mb = new MessageBuilder()
+      .header('📋', 'Platform Subscription Plans')
+      .break()
+      .line('These plans are offered to clients for platform access.')
+      .break();
 
-    await ctx.reply(withFooter(`
-📋 <b>Platform Subscription Plans</b>
+    if (plans && plans.length > 0) {
+       // We'll stick to the original logic of building a simple list string here since it's just a display list
+       // But we can use the list method if we format it first
+       const items = plans.map(p => `<b>${escapeHtml(p.name)}</b> - $${p.price_amount} / ${p.duration_days} days ${p.is_active ? '✅' : '❌'}`);
+       mb.list(items, '•');
+    } else {
+       mb.info('No platform plans created yet.');
+    }
 
-These plans are offered to clients for platform access.
-
-${planList}
-    `), { parse_mode: 'HTML', reply_markup: keyboard });
+    await ctx.reply(mb.toString(), { parse_mode: 'HTML', reply_markup: keyboard });
   });
 
   // Create Platform Plan
@@ -104,34 +113,38 @@ ${planList}
     const ipnUrl = config.NOWPAYMENTS_IPN_CALLBACK_URL || 'Not configured';
     const ipnSecret = config.NOWPAYMENTS_IPN_SECRET ? '✅ Configured' : '❌ Not set';
 
-    await ctx.reply(withFooter(`
-🔔 <b>IPN Settings</b>
+    const message = new MessageBuilder()
+      .header('🔔', 'IPN Settings')
+      .break()
+      .line('Configure NOWPayments webhook notifications.')
+      .break()
+      .field('IPN Callback URL', `<code>${ipnUrl}</code>`)
+      .field('IPN Secret', ipnSecret)
+      .break()
+      .line('<b>Setup Instructions:</b>')
+      .list([
+        'Go to NOWPayments dashboard',
+        'Navigate to Settings → IPN',
+        'Set the callback URL above',
+        'Copy the IPN secret to your .env file'
+      ], '1.')
+      .toString();
 
-Configure NOWPayments webhook notifications.
-
-<b>IPN Callback URL:</b>
-<code>${ipnUrl}</code>
-
-<b>IPN Secret:</b> ${ipnSecret}
-
-<b>Setup Instructions:</b>
-1. Go to NOWPayments dashboard
-2. Navigate to Settings → IPN
-3. Set the callback URL above
-4. Copy the IPN secret to your .env file
-    `), { parse_mode: 'HTML', reply_markup: keyboard });
+    await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
   });
 
   // Admin search client
   bot.callbackQuery('admin_search', adminOnly(), async (ctx) => {
     await ctx.answerCallbackQuery();
-    await ctx.reply(withFooter(`
-🔍 <b>Search Client</b>
+    const message = new MessageBuilder()
+      .header('🔍', 'Search Client')
+      .break()
+      .line("Send the client's username or business name to search.")
+      .break()
+      .info('Example: @username or "Premium Signals"')
+      .toString();
 
-Send the client's username or business name to search.
-
-<i>Example: @username or "Premium Signals"</i>
-    `), { parse_mode: 'HTML' });
+    await ctx.reply(message, { parse_mode: 'HTML' });
   });
 
   // Approve client
@@ -186,13 +199,16 @@ async function showClientsList(ctx: MainBotContext) {
 
   keyboard.text('« Back to Dashboard', 'start');
 
-  await ctx.reply(
-    withFooter('👥 <b>All Clients</b>\n\nSelect a client to view details:'),
-    {
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
-    }
-  );
+  const message = new MessageBuilder()
+    .header('👥', 'All Clients')
+    .break()
+    .line('Select a client to view details:')
+    .toString();
+
+  await ctx.reply(message, {
+    parse_mode: 'HTML',
+    reply_markup: keyboard,
+  });
 }
 
 async function showPendingApprovals(ctx: MainBotContext) {
@@ -206,10 +222,11 @@ async function showPendingApprovals(ctx: MainBotContext) {
 
   if (error || !pending || pending.length === 0) {
     const keyboard = new InlineKeyboard().text('« Back', 'start');
-    await ctx.reply(
-      withFooter('✅ No pending approvals!'),
-      { parse_mode: 'HTML', reply_markup: keyboard }
-    );
+    const message = new MessageBuilder()
+      .header('✅', 'No pending approvals!')
+      .toString();
+
+    await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
     return;
   }
 
@@ -224,13 +241,16 @@ async function showPendingApprovals(ctx: MainBotContext) {
 
   keyboard.text('« Back', 'start');
 
-  await ctx.reply(
-    withFooter(`📋 <b>Pending Approvals (${pending.length})</b>\n\nReview and approve new clients:`),
-    {
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
-    }
-  );
+  const message = new MessageBuilder()
+    .header('📋', `Pending Approvals (${pending.length})`)
+    .break()
+    .line('Review and approve new clients:')
+    .toString();
+
+  await ctx.reply(message, {
+    parse_mode: 'HTML',
+    reply_markup: keyboard,
+  });
 }
 
 async function showPlatformStats(ctx: MainBotContext) {
@@ -272,27 +292,33 @@ async function showPlatformStats(ctx: MainBotContext) {
     .text('🔄 Refresh', 'admin_stats')
     .text('« Back', 'start');
 
-  const message = `
-📈 <b>Platform Statistics</b>
+  const message = new MessageBuilder()
+    .header('📈', 'Platform Statistics')
+    .break()
+    .line('<b>Clients:</b>')
+    .list([
+      `Total: ${totalClients || 0}`,
+      `Active: ${activeClients || 0}`,
+      `Trial: ${trialClients || 0}`,
+      `Pending: ${pendingClients || 0}`
+    ])
+    .break()
+    .line('<b>Selling Bots:</b>')
+    .list([
+      `Total: ${totalBots || 0}`,
+      `Active: ${activeBots || 0}`
+    ])
+    .break()
+    .line('<b>Subscribers:</b>')
+    .list([
+      `Total: ${totalSubscribers || 0}`,
+      `Active: ${activeSubscribers || 0}`
+    ])
+    .break()
+    .field("Today's Payments", `${todayPayments || 0}`)
+    .toString();
 
-<b>Clients:</b>
-• Total: ${totalClients || 0}
-• Active: ${activeClients || 0}
-• Trial: ${trialClients || 0}
-• Pending: ${pendingClients || 0}
-
-<b>Selling Bots:</b>
-• Total: ${totalBots || 0}
-• Active: ${activeBots || 0}
-
-<b>Subscribers:</b>
-• Total: ${totalSubscribers || 0}
-• Active: ${activeSubscribers || 0}
-
-<b>Today's Payments:</b> ${todayPayments || 0}
-`;
-
-  await ctx.reply(withFooter(message), {
+  await ctx.reply(message, {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });
@@ -334,25 +360,36 @@ async function showClientDetails(ctx: MainBotContext, clientId: string) {
       }).join('\n')
     : '  None';
 
-  const message = `
-👤 <b>Client Details</b>
+  const mb = new MessageBuilder()
+    .header('👤', 'Client Details')
+    .break()
+    .field('Business', client.business_name)
+    .field('Status', `${getStatusEmoji(client.status)} ${client.status}`)
+    .field('Channel', client.channel_username ? `@${client.channel_username}` : 'Not set')
+    .field('Email', client.contact_email || 'Not provided')
+    .field('Registered', formatDate(new Date(client.created_at)))
+    .break();
 
-<b>Business:</b> ${escapeHtml(client.business_name)}
-<b>Status:</b> ${getStatusEmoji(client.status)} ${client.status}
-<b>Channel:</b> @${escapeHtml(client.channel_username || 'Not set')}
-<b>Email:</b> ${escapeHtml(client.contact_email || 'Not provided')}
-<b>Registered:</b> ${formatDate(new Date(client.created_at))}
+  // Trial info
+  if (client.trial_activated) {
+    mb.line('<b>Trial:</b>');
+    mb.line(`Started: ${formatDate(new Date(client.trial_start_date!))}`);
+    mb.line(`Ends: ${formatDate(new Date(client.trial_end_date!))}`);
+  } else {
+    mb.field('Trial', 'Not started');
+  }
+  mb.break();
 
-<b>Trial:</b>
-${client.trial_activated
-    ? `Started: ${formatDate(new Date(client.trial_start_date!))}\nEnds: ${formatDate(new Date(client.trial_end_date!))}`
-    : 'Not started'}
+  // Bots info
+  mb.line(`<b>Selling Bots (${client.selling_bots?.length || 0}):</b>`);
+  if (client.selling_bots && client.selling_bots.length > 0) {
+    // We retain the custom formatting logic for bots as it's complex
+    mb.raw(botsInfo); 
+  } else {
+    mb.line('  None');
+  }
 
-<b>Selling Bots (${client.selling_bots?.length || 0}):</b>
-${botsInfo}
-`;
-
-  await ctx.reply(withFooter(message), {
+  await ctx.reply(mb.toString(), {
     parse_mode: 'HTML',
     reply_markup: keyboard,
   });
@@ -376,21 +413,25 @@ async function approveClient(ctx: MainBotContext, clientId: string) {
     const { config } = await import('../../../shared/config/index.js');
     const mainBot = new Bot(config.MAIN_BOT_TOKEN);
 
+    const notifyMessage = new MessageBuilder()
+      .header('🎉', 'Account Approved!')
+      .break()
+      .line('Your account has been approved and is ready to use.')
+      .break()
+      .line('<b>Next steps:</b>')
+      .list([
+        'Create your first Selling Bot',
+        'Configure subscription plans',
+        'Link your Telegram channel',
+        'Start accepting subscribers!'
+      ], '1.')
+      .break()
+      .line('Use /start to begin.')
+      .toString();
+
     await mainBot.api.sendMessage(
       Number(client.telegram_user_id),
-      withFooter(`
-🎉 <b>Account Approved!</b>
-
-Your account has been approved and is ready to use.
-
-<b>Next steps:</b>
-1. Create your first Selling Bot
-2. Configure subscription plans
-3. Link your Telegram channel
-4. Start accepting subscribers!
-
-Use /start to begin.
-`),
+      notifyMessage,
       { parse_mode: 'HTML' }
     );
 
@@ -420,13 +461,18 @@ async function showSuspendConfirm(ctx: MainBotContext, clientId: string) {
     .text('🚫 Confirm Suspend', `confirm_suspend:${clientId}`)
     .text('❌ Cancel', `view_client:${clientId}`);
 
-  await ctx.reply(
-    `⚠️ <b>Suspend Client</b>\n\nAre you sure you want to suspend "<b>${escapeHtml(client.business_name)}</b>"?\n\nThis will pause all their selling bots.`,
-    {
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
-    }
-  );
+  const message = new MessageBuilder()
+    .header('⚠️', 'Suspend Client')
+    .break()
+    .line(`Are you sure you want to suspend "<b>${escapeHtml(client.business_name)}</b>"?`)
+    .break()
+    .line('This will pause all their selling bots.')
+    .toString();
+
+  await ctx.reply(message, {
+    parse_mode: 'HTML',
+    reply_markup: keyboard,
+  });
 }
 
 function getStatusEmoji(status: string): string {

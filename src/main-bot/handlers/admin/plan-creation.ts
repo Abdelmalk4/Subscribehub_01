@@ -5,19 +5,22 @@
 import { InlineKeyboard } from 'grammy';
 import type { MainBotConversation, MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type SubscriptionPlan } from '../../../database/index.js';
-import { mainBotLogger as logger, withFooter } from '../../../shared/utils/index.js';
+import { mainBotLogger as logger, withFooter, MessageBuilder } from '../../../shared/utils/index.js';
 
 export async function adminPlanCreationConversation(
   conversation: MainBotConversation,
   ctx: MainBotContext
 ) {
   // Step 1: Plan Name
-  await ctx.reply(
-    '📝 *Step 1/4: Platform Plan Name*\n\n' +
-      'Enter a name for this platform subscription plan:\n\n' +
-      '_Example: "Pro - Monthly", "Enterprise"_',
-    { parse_mode: 'HTML' }
-  );
+  const step1Message = new MessageBuilder()
+    .header('📝', 'Step 1/4: Platform Plan Name')
+    .break()
+    .line('Enter a name for this platform subscription plan:')
+    .break()
+    .info('Example: "Pro - Monthly", "Enterprise"')
+    .toString();
+
+  await ctx.reply(step1Message, { parse_mode: 'HTML' });
 
   const nameCtx = await conversation.waitFor('message:text');
   const name = nameCtx.message.text.trim();
@@ -28,12 +31,15 @@ export async function adminPlanCreationConversation(
   }
 
   // Step 2: Price
-  await ctx.reply(
-    '💰 *Step 2/4: Price*\n\n' +
-      'Enter the price in USD:\n\n' +
-      '_Example: 9.99, 29, 99.99_',
-    { parse_mode: 'HTML' }
-  );
+  const step2Message = new MessageBuilder()
+    .header('💰', 'Step 2/4: Price')
+    .break()
+    .line('Enter the price in USD:')
+    .break()
+    .info('Example: 9.99, 29, 99.99')
+    .toString();
+
+  await ctx.reply(step2Message, { parse_mode: 'HTML' });
 
   const priceCtx = await conversation.waitFor('message:text');
   const priceAmount = parseFloat(priceCtx.message.text.trim());
@@ -44,12 +50,15 @@ export async function adminPlanCreationConversation(
   }
 
   // Step 3: Duration
-  await ctx.reply(
-    '📅 *Step 3/4: Duration*\n\n' +
-      'Enter the subscription duration in days:\n\n' +
-      '_Example: 30 (monthly), 365 (yearly)_',
-    { parse_mode: 'HTML' }
-  );
+  const step3Message = new MessageBuilder()
+    .header('📅', 'Step 3/4: Duration')
+    .break()
+    .line('Enter the subscription duration in days:')
+    .break()
+    .info('Example: 30 (monthly), 365 (yearly)')
+    .toString();
+
+  await ctx.reply(step3Message, { parse_mode: 'HTML' });
 
   const durationCtx = await conversation.waitFor('message:text');
   const durationDays = parseInt(durationCtx.message.text.trim());
@@ -60,12 +69,15 @@ export async function adminPlanCreationConversation(
   }
 
   // Step 4: Description (optional)
-  await ctx.reply(
-    '📝 *Step 4/4: Description (Optional)*\n\n' +
-      'Enter a short description, or send /skip:\n\n' +
-      '_Example: "Includes up to 5 bots and 1000 subscribers"_',
-    { parse_mode: 'HTML' }
-  );
+  const step4Message = new MessageBuilder()
+    .header('📝', 'Step 4/4: Description (Optional)')
+    .break()
+    .line('Enter a short description, or send /skip:')
+    .break()
+    .info('Example: "Includes up to 5 bots and 1000 subscribers"')
+    .toString();
+
+  await ctx.reply(step4Message, { parse_mode: 'HTML' });
 
   const descCtx = await conversation.waitFor('message:text');
   const description = descCtx.message.text === '/skip' ? null : descCtx.message.text.trim();
@@ -76,18 +88,21 @@ export async function adminPlanCreationConversation(
     .row()
     .text('❌ Cancel', 'cancel_platform_plan');
 
-  await ctx.reply(
-    `📋 *Confirm Platform Plan*\n\n` +
-      `*Name:* ${name}\n` +
-      `*Price:* $${priceAmount} USD\n` +
-      `*Duration:* ${durationDays} days\n` +
-      `*Description:* ${description || 'None'}\n\n` +
-      `Create this plan?`,
-    {
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
-    }
-  );
+  const confirmMessage = new MessageBuilder()
+    .header('📋', 'Confirm Platform Plan')
+    .break()
+    .field('Name', name)
+    .field('Price', `$${priceAmount} USD`)
+    .field('Duration', `${durationDays} days`)
+    .field('Description', description || 'None')
+    .break()
+    .line('Create this plan?')
+    .toString();
+
+  await ctx.reply(confirmMessage, {
+    parse_mode: 'HTML',
+    reply_markup: keyboard,
+  });
 
   const confirmCtx = await conversation.waitForCallbackQuery([
     'confirm_platform_plan',
@@ -121,14 +136,15 @@ export async function adminPlanCreationConversation(
 
     const plan = data as SubscriptionPlan;
 
-    await ctx.reply(
-      withFooter(
-        `✅ *Platform Plan Created!*\n\n` +
-          `*${plan.name}* is now active.\n\n` +
-          `Admin > Platform Settings > Plans`
-      ),
-      { parse_mode: 'HTML' }
-    );
+    const successMessage = new MessageBuilder()
+      .header('✅', 'Platform Plan Created!')
+      .break()
+      .line(`<b>${plan.name}</b> is now active.`)
+      .break()
+      .line('Admin > Platform Settings > Plans')
+      .toString();
+
+    await ctx.reply(successMessage, { parse_mode: 'HTML' });
 
     logger.info({ planId: plan.id, name }, 'Platform plan created');
   } catch (error) {

@@ -6,7 +6,7 @@
 import { Middleware } from 'grammy';
 import { supabase, type Client } from '../../database/index.js';
 import type { MainBotContext } from '../../shared/types/index.js';
-import { mainBotLogger as logger } from '../../shared/utils/index.js';
+import { mainBotLogger as logger, MessageBuilder } from '../../shared/utils/index.js';
 
 export function setupClientMiddleware(): Middleware<MainBotContext> {
   return async (ctx, next) => {
@@ -53,10 +53,14 @@ export function setupClientMiddleware(): Middleware<MainBotContext> {
 export function clientOnly(): Middleware<MainBotContext> {
   return async (ctx, next) => {
     if (!ctx.client) {
-      await ctx.reply(
-        '❌ You are not registered yet.\n\n' +
-        'Use /start to create your account.'
-      );
+      const message = new MessageBuilder()
+        .header('❌', 'Registration Required')
+        .break()
+        .line('You are not registered yet.')
+        .line('Use /start to create your account.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML' });
       return;
     }
     await next();
@@ -83,10 +87,14 @@ export function activeClientOnly(): Middleware<MainBotContext> {
       return;
     }
     if (status === 'EXPIRED') {
-      await ctx.reply(
-        '⚠️ Your subscription has expired.\n\n' +
-        'Please renew to continue using the platform.'
-      );
+      const message = new MessageBuilder()
+        .header('⚠️', 'Subscription Expired')
+        .break()
+        .line('Your subscription has expired.')
+        .line('Please renew to continue using the platform.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML' });
       return;
     }
 

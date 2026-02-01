@@ -6,7 +6,7 @@ import { Bot, InlineKeyboard } from 'grammy';
 import type { SellingBotContext } from '../../../shared/types/index.js';
 import { supabase, type SubscriptionPlan, type PaymentTransaction } from '../../../database/index.js';
 import { createInvoice } from '../../../shared/integrations/nowpayments.js';
-import { withFooter, formatPrice, addDays, escapeHtml } from '../../../shared/utils/index.js';
+import { withFooter, formatPrice, addDays, escapeHtml, MessageBuilder } from '../../../shared/utils/index.js';
 import { sellingBotLogger as logger } from '../../../shared/utils/index.js';
 import { config, PLATFORM } from '../../../shared/config/index.js';
 
@@ -85,18 +85,18 @@ async function createPaymentInvoice(ctx: SellingBotContext, planId: string) {
       .row()
       .text('❌ Cancel', 'plans');
 
-    const message = `
-💳 <b>Payment Invoice Created</b>
+    const message = new MessageBuilder()
+      .header('💳', 'Payment Invoice Created')
+      .break()
+      .field('Plan', plan.name)
+      .field('Amount', formatPrice(plan.price_amount, plan.price_currency))
+      .break()
+      .line('Click the button below to complete payment:')
+      .break()
+      .info(`⏱️ This invoice expires in ${PLATFORM.INVOICE_EXPIRATION_MINUTES} minutes.`)
+      .toString();
 
-<b>Plan:</b> ${escapeHtml(plan.name)}
-<b>Amount:</b> ${formatPrice(plan.price_amount, plan.price_currency)}
-
-Click the button below to complete payment:
-
-⏱️ This invoice expires in ${PLATFORM.INVOICE_EXPIRATION_MINUTES} minutes.
-`;
-
-    await ctx.reply(withFooter(message), {
+    await ctx.reply(message, {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
@@ -127,45 +127,61 @@ async function checkPaymentStatus(ctx: SellingBotContext, transactionId: string)
     const status = transaction.payment_status;
 
     if (status === 'CONFIRMED') {
-      await ctx.reply(
-        withFooter('✅ <b>Payment Confirmed!</b>\n\nYour subscription is now active.\n\nUse /start to access your subscription details.'),
-        { parse_mode: 'HTML' }
-      );
+      const message = new MessageBuilder()
+        .header('✅', 'Payment Confirmed!')
+        .break()
+        .line('Your subscription is now active.')
+        .line('Use /start to access your subscription details.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML' });
       return;
     }
 
     if (status === 'CONFIRMING') {
       keyboard.text('🔄 Check Again', `check_payment:${transactionId}`);
-      await ctx.reply(
-        withFooter('⏳ <b>Payment Detected</b>\n\nYour payment is being confirmed. This usually takes 1-3 blockchain confirmations.'),
-        { parse_mode: 'HTML', reply_markup: keyboard }
-      );
+      const message = new MessageBuilder()
+        .header('⏳', 'Payment Detected')
+        .break()
+        .line('Your payment is being confirmed. This usually takes 1-3 blockchain confirmations.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
       return;
     }
 
     if (status === 'EXPIRED') {
       keyboard.text('📋 View Plans', 'plans');
-      await ctx.reply(
-        withFooter('⚠️ <b>Invoice Expired</b>\n\nPlease create a new invoice to continue.'),
-        { parse_mode: 'HTML', reply_markup: keyboard }
-      );
+      const message = new MessageBuilder()
+        .header('⚠️', 'Invoice Expired')
+        .break()
+        .line('Please create a new invoice to continue.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
       return;
     }
 
     if (status === 'FAILED') {
       keyboard.text('📋 Try Again', 'plans');
-      await ctx.reply(
-        withFooter('❌ <b>Payment Failed</b>\n\nPlease try again or contact support.'),
-        { parse_mode: 'HTML', reply_markup: keyboard }
-      );
+      const message = new MessageBuilder()
+        .header('❌', 'Payment Failed')
+        .break()
+        .line('Please try again or contact support.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
       return;
     }
 
     keyboard.text('🔄 Check Again', `check_payment:${transactionId}`).row().text('❌ Cancel', 'plans');
-    await ctx.reply(
-      withFooter('⏳ <b>Awaiting Payment</b>\n\nWe have not detected a payment yet.'),
-      { parse_mode: 'HTML', reply_markup: keyboard }
-    );
+    const message = new MessageBuilder()
+      .header('⏳', 'Awaiting Payment')
+      .break()
+      .line('We have not detected a payment yet.')
+      .toString();
+
+    await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
   } catch (error) {
     logger.error({ error, transactionId }, 'Failed to check payment status');
     await ctx.reply('❌ Failed to check status. Please try again.');

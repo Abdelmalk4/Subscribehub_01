@@ -8,6 +8,8 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('telegram');
 
+export type ParseMode = 'HTML' | 'Markdown' | 'MarkdownV2';
+
 /**
  * Retry interaction with Telegram API
  * @param operation Function to execute
@@ -205,7 +207,7 @@ export async function safeSendMessage(
   chatId: number | string,
   text: string,
   options?: {
-    parse_mode?: 'HTML' | 'HTML' | 'HTMLV2';
+    parse_mode?: ParseMode;
     reply_markup?: InlineKeyboard;
   }
 ): Promise<boolean> {

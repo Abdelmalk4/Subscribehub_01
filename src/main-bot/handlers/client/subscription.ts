@@ -35,6 +35,13 @@ export function setupSubscriptionHandler(bot: Bot<MainBotContext>) {
     await ctx.answerCallbackQuery('Generating invoice...');
     await createPlatformInvoice(ctx, planId);
   });
+
+  // Check platform payment status
+  bot.callbackQuery(/^check_platform_payment:(.+)$/, clientOnly(), async (ctx) => {
+    const transactionId = ctx.match[1];
+    await ctx.answerCallbackQuery('Checking...');
+    await checkPlatformPaymentStatus(ctx, transactionId);
+  });
 }
 
 async function showSubscriptionStatus(ctx: MainBotContext) {
@@ -235,6 +242,8 @@ async function createPlatformInvoice(ctx: MainBotContext, planId: string) {
     const keyboard = new InlineKeyboard()
       .url('🌐 Pay with Crypto', invoice.invoice_url)
       .row()
+      .text('🔄 Check Payment Status', `check_platform_payment:${transaction.id}`)
+      .row()
       .text('« Back to Plans', 'platform_plans');
 
     const message = new MessageBuilder()
@@ -258,5 +267,128 @@ async function createPlatformInvoice(ctx: MainBotContext, planId: string) {
   } catch (error) {
     logger.error({ error, planId }, 'Failed to create platform invoice');
     await ctx.reply('❌ Failed to generate payment invoice. Please try again.');
+  }
+}
+
+async function checkPlatformPaymentStatus(ctx: MainBotContext, transactionId: string) {
+  try {
+    const { data } = await supabase
+      .from('payment_transactions')
+      .select('*, subscription_plans(*)')
+      .eq('id', transactionId)
+      .single();
+
+    const transaction = data as any;
+
+    if (!transaction) {
+      await ctx.reply('❌ Transaction not found.');
+      return;
+    }
+
+    const keyboard = new InlineKeyboard();
+    let status = transaction.payment_status;
+
+    // If status is PENDING, poll NOWPayments API for real-time status
+    if (status === 'PENDING' && transaction.nowpayments_invoice_id) {
+      try {
+        const { getInvoicePayments, mapPaymentStatus } = await import('../../../shared/integrations/nowpayments.js');
+        const invoicePayments = await getInvoicePayments(
+          config.NOWPAYMENTS_API_KEY!,
+          transaction.nowpayments_invoice_id
+        );
+
+        if (invoicePayments.data && invoicePayments.data.length > 0) {
+          const latestPayment = invoicePayments.data[0];
+          const newStatus = mapPaymentStatus(latestPayment.payment_status);
+
+          // Update DB if status has changed
+          if (newStatus !== status) {
+            await (supabase
+              .from('payment_transactions') as any)
+              .update({
+                payment_status: newStatus,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', transactionId);
+
+            status = newStatus;
+            logger.info({ transactionId, oldStatus: transaction.payment_status, newStatus }, 'Platform payment status updated from API poll');
+
+            // If confirmed, trigger the webhook processing to activate subscription
+            if (newStatus === 'CONFIRMED') {
+              await (supabase.rpc as any)('process_payment_webhook', {
+                p_invoice_id: transaction.nowpayments_invoice_id,
+                p_payment_status: 'finished',
+                p_actually_paid: latestPayment.actually_paid || transaction.amount,
+                p_pay_currency: latestPayment.pay_currency || transaction.currency
+              });
+            }
+          }
+        }
+      } catch (pollError) {
+        logger.warn({ pollError, transactionId }, 'Failed to poll NOWPayments API for platform payment, using cached status');
+        // Continue with cached status from DB
+      }
+    }
+
+    if (status === 'CONFIRMED') {
+      const message = new MessageBuilder()
+        .header('✅', 'Payment Confirmed!')
+        .break()
+        .line('Your platform subscription is now active.')
+        .line('Use /subscription to view your status.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML' });
+      return;
+    }
+
+    if (status === 'CONFIRMING') {
+      keyboard.text('🔄 Check Again', `check_platform_payment:${transactionId}`);
+      const message = new MessageBuilder()
+        .header('⏳', 'Payment Detected')
+        .break()
+        .line('Your payment is being confirmed. This usually takes 1-3 blockchain confirmations.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
+      return;
+    }
+
+    if (status === 'EXPIRED') {
+      keyboard.text('📋 View Plans', 'platform_plans');
+      const message = new MessageBuilder()
+        .header('⚠️', 'Invoice Expired')
+        .break()
+        .line('Please create a new invoice to continue.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
+      return;
+    }
+
+    if (status === 'FAILED') {
+      keyboard.text('📋 Try Again', 'platform_plans');
+      const message = new MessageBuilder()
+        .header('❌', 'Payment Failed')
+        .break()
+        .line('Please try again or contact support.')
+        .toString();
+
+      await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
+      return;
+    }
+
+    keyboard.text('🔄 Check Again', `check_platform_payment:${transactionId}`).row().text('« Back', 'platform_plans');
+    const message = new MessageBuilder()
+      .header('⏳', 'Awaiting Payment')
+      .break()
+      .line('We have not detected a payment yet.')
+      .toString();
+
+    await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
+  } catch (error) {
+    logger.error({ error, transactionId }, 'Failed to check platform payment status');
+    await ctx.reply('❌ Failed to check status. Please try again.');
   }
 }

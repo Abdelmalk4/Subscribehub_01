@@ -153,6 +153,58 @@ export async function getPaymentStatus(
 }
 
 /**
+ * Response from invoice payments endpoint
+ */
+interface InvoicePaymentInfo {
+  id: number;
+  invoice_id: number;
+  order_id: string;
+  order_description: string;
+  price_amount: number;
+  price_currency: string;
+  pay_currency: string;
+  pay_amount: number;
+  actually_paid: number;
+  pay_address: string;
+  payment_status: string;
+  purchase_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface InvoicePaymentsResponse {
+  data: InvoicePaymentInfo[];
+  total: number;
+}
+
+/**
+ * Get payments for an invoice by invoice ID
+ * This is useful for checking payment status when webhooks may be delayed
+ */
+export async function getInvoicePayments(
+  apiKey: string,
+  invoiceId: string
+): Promise<InvoicePaymentsResponse> {
+  logger.debug({ invoiceId }, 'Fetching payments for invoice');
+
+  try {
+    const response = await ky
+      .get(`${NOWPAYMENTS_API_URL}/invoice-payment/${invoiceId}`, {
+        headers: {
+          'x-api-key': apiKey,
+        },
+        timeout: 15000,
+      })
+      .json<InvoicePaymentsResponse>();
+
+    return response;
+  } catch (error) {
+    logger.error({ error, invoiceId }, 'Failed to get invoice payments');
+    throw new Error('Failed to check invoice payments');
+  }
+}
+
+/**
  * Validate webhook signature
  */
 export function validateWebhookSignature(

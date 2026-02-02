@@ -109,6 +109,8 @@ async function createPaymentInvoice(ctx: SellingBotContext, planId: string) {
 }
 
 async function checkPaymentStatus(ctx: SellingBotContext, transactionId: string) {
+  const botConfig = ctx.botConfig!;
+  
   try {
     const { data } = await supabase
       .from('payment_transactions')
@@ -124,7 +126,51 @@ async function checkPaymentStatus(ctx: SellingBotContext, transactionId: string)
     }
 
     const keyboard = new InlineKeyboard();
-    const status = transaction.payment_status;
+    let status = transaction.payment_status;
+
+    // If status is PENDING, poll NOWPayments API for real-time status
+    if (status === 'PENDING' && transaction.nowpayments_invoice_id) {
+      try {
+        const { getInvoicePayments, mapPaymentStatus } = await import('../../../shared/integrations/nowpayments.js');
+        const invoicePayments = await getInvoicePayments(
+          botConfig.nowpaymentsApiKey,
+          transaction.nowpayments_invoice_id
+        );
+
+        if (invoicePayments.data && invoicePayments.data.length > 0) {
+          const latestPayment = invoicePayments.data[0];
+          const newStatus = mapPaymentStatus(latestPayment.payment_status);
+
+          // Update DB if status has changed
+          if (newStatus !== status) {
+            await (supabase
+              .from('payment_transactions') as any)
+              .update({ 
+                payment_status: newStatus,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', transactionId);
+
+            status = newStatus;
+            logger.info({ transactionId, oldStatus: transaction.payment_status, newStatus }, 'Payment status updated from API poll');
+
+            // If confirmed, trigger the webhook processing to grant access
+            if (newStatus === 'CONFIRMED') {
+              const { supabase: db } = await import('../../../database/index.js');
+              await (db.rpc as any)('process_payment_webhook', {
+                p_invoice_id: transaction.nowpayments_invoice_id,
+                p_payment_status: 'finished',
+                p_actually_paid: latestPayment.actually_paid || transaction.amount,
+                p_pay_currency: latestPayment.pay_currency || transaction.currency
+              });
+            }
+          }
+        }
+      } catch (pollError) {
+        logger.warn({ pollError, transactionId }, 'Failed to poll NOWPayments API, using cached status');
+        // Continue with cached status from DB
+      }
+    }
 
     if (status === 'CONFIRMED') {
       const message = new MessageBuilder()
@@ -187,3 +233,4 @@ async function checkPaymentStatus(ctx: SellingBotContext, transactionId: string)
     await ctx.reply('❌ Failed to check status. Please try again.');
   }
 }
+

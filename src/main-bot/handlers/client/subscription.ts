@@ -288,18 +288,37 @@ async function checkPlatformPaymentStatus(ctx: MainBotContext, transactionId: st
     const keyboard = new InlineKeyboard();
     let status = transaction.payment_status;
 
-    // If status is PENDING, poll NOWPayments API for real-time status
-    if (status === 'PENDING' && transaction.nowpayments_invoice_id) {
+    // If status is PENDING or CONFIRMING, poll NOWPayments API for real-time status
+    if ((status === 'PENDING' || status === 'CONFIRMING') && transaction.nowpayments_invoice_id) {
       try {
         const { getInvoicePayments, mapPaymentStatus } = await import('../../../shared/integrations/nowpayments.js');
+        
+        logger.info({ transactionId, invoiceId: transaction.nowpayments_invoice_id }, 'Polling NOWPayments API for status');
+        
         const invoicePayments = await getInvoicePayments(
           config.NOWPAYMENTS_API_KEY!,
           transaction.nowpayments_invoice_id
         );
 
+        logger.info({ 
+          transactionId, 
+          paymentsCount: invoicePayments.data?.length || 0,
+          rawResponse: JSON.stringify(invoicePayments).substring(0, 500)
+        }, 'NOWPayments API response');
+
         if (invoicePayments.data && invoicePayments.data.length > 0) {
+          // Get the most recent payment
           const latestPayment = invoicePayments.data[0];
-          const newStatus = mapPaymentStatus(latestPayment.payment_status);
+          const nowpaymentsStatus = latestPayment.payment_status;
+          const newStatus = mapPaymentStatus(nowpaymentsStatus);
+
+          logger.info({ 
+            transactionId, 
+            nowpaymentsStatus,
+            mappedStatus: newStatus,
+            actuallyPaid: latestPayment.actually_paid,
+            expectedAmount: transaction.amount
+          }, 'Payment status from API');
 
           // Update DB if status has changed
           if (newStatus !== status) {
@@ -307,26 +326,37 @@ async function checkPlatformPaymentStatus(ctx: MainBotContext, transactionId: st
               .from('payment_transactions') as any)
               .update({
                 payment_status: newStatus,
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
+                ...(newStatus === 'CONFIRMED' ? { confirmed_at: new Date().toISOString() } : {})
               })
               .eq('id', transactionId);
 
             status = newStatus;
             logger.info({ transactionId, oldStatus: transaction.payment_status, newStatus }, 'Platform payment status updated from API poll');
 
-            // If confirmed, trigger the webhook processing to activate subscription
+            // If confirmed, trigger the RPC to activate subscription
             if (newStatus === 'CONFIRMED') {
-              await (supabase.rpc as any)('process_payment_webhook', {
+              logger.info({ transactionId }, 'Triggering subscription activation via RPC');
+              
+              const { data: rpcResult, error: rpcError } = await (supabase.rpc as any)('process_payment_webhook', {
                 p_invoice_id: transaction.nowpayments_invoice_id,
                 p_payment_status: 'finished',
                 p_actually_paid: latestPayment.actually_paid || transaction.amount,
                 p_pay_currency: latestPayment.pay_currency || transaction.currency
               });
+
+              if (rpcError) {
+                logger.error({ rpcError, transactionId }, 'RPC subscription activation failed');
+              } else {
+                logger.info({ rpcResult, transactionId }, 'RPC subscription activation completed');
+              }
             }
           }
+        } else {
+          logger.info({ transactionId }, 'No payments found for this invoice yet');
         }
       } catch (pollError) {
-        logger.warn({ pollError, transactionId }, 'Failed to poll NOWPayments API for platform payment, using cached status');
+        logger.error({ pollError, transactionId }, 'Failed to poll NOWPayments API for platform payment');
         // Continue with cached status from DB
       }
     }

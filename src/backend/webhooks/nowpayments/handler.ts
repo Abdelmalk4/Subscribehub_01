@@ -108,7 +108,7 @@ export function registerWebhookRoutes(app: FastifyInstance) {
 
         const response = result as any;
 
-        if (response.status === 'success' && response.action === 'activated_subscriber') {
+        if (response.status === 'success' && (response.action === 'activated_subscriber' || response.action === 'activated_client')) {
              // Access granting can remain here as side-effect, but state is already safe
              await triggerPostPaymentActions(payload.invoice_id);
         }

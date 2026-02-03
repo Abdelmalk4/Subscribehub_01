@@ -8,6 +8,7 @@ import { supabase, type Client, type SellingBot, type SubscriptionPlan, type Sub
 import { mainBotLogger as logger, withFooter, formatDate, escapeHtml, MessageBuilder } from '../../../shared/utils/index.js';
 import { config } from '../../../shared/config/index.js';
 import { adminOnly } from '../../middleware/admin.js';
+import { manuallyProcessPayment } from '../../../backend/services/payment/override.js';
 
 export function setupAdminHandlers(bot: Bot<MainBotContext>) {
   // Admin clients list
@@ -166,6 +167,33 @@ export function setupAdminHandlers(bot: Bot<MainBotContext>) {
     const clientId = ctx.match[1];
     await ctx.answerCallbackQuery();
     await showClientDetails(ctx, clientId);
+  });
+
+  // Pending payments
+  bot.callbackQuery('admin_pending_payments', adminOnly(), async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showPendingPayments(ctx);
+  });
+
+  // Payment details
+  bot.callbackQuery(/^admin:payment_details:(.+)$/, adminOnly(), async (ctx) => {
+    const txId = ctx.match[1];
+    await ctx.answerCallbackQuery();
+    await showPaymentDetails(ctx, txId);
+  });
+
+  // Manual grant payment
+  bot.callbackQuery(/^admin:manual_grant:(.+)$/, adminOnly(), async (ctx) => {
+    const txId = ctx.match[1];
+    await ctx.answerCallbackQuery();
+    await showManualGrantConfirm(ctx, txId);
+  });
+
+  // Confirm manual grant
+  bot.callbackQuery(/^admin:confirm_grant:(.+)$/, adminOnly(), async (ctx) => {
+    const txId = ctx.match[1];
+    await ctx.answerCallbackQuery('Processing...');
+    await processManualGrant(ctx, txId);
   });
 }
 
@@ -485,3 +513,173 @@ function getStatusEmoji(status: string): string {
     default: return '❓';
   }
 }
+
+async function showPendingPayments(ctx: MainBotContext) {
+  const { data, error } = await supabase
+    .from('payment_transactions')
+    .select('*, subscribers(username, first_name), subscription_plans(name)')
+    .in('payment_status', ['PENDING', 'CONFIRMING'])
+    .eq('payment_type', 'SUBSCRIBER_SUBSCRIPTION')
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  const payments = data as any[] | null;
+
+  if (error || !payments || payments.length === 0) {
+    const keyboard = new InlineKeyboard().text('« Back', 'start');
+    const message = new MessageBuilder()
+      .header('✅', 'No Pending Payments')
+      .break()
+      .line('All payments are processed!')
+      .toString();
+
+    await ctx.reply(message, { parse_mode: 'HTML', reply_markup: keyboard });
+    return;
+  }
+
+  const keyboard = new InlineKeyboard();
+
+  for (const payment of payments) {
+    const subscriberName = payment.subscribers?.username 
+      ? `@${payment.subscribers.username}` 
+      : payment.subscribers?.first_name || 'Unknown';
+    const planName = payment.subscription_plans?.name || 'Unknown Plan';
+    const statusEmoji = payment.payment_status === 'CONFIRMING' ? '🔄' : '⏳';
+    
+    keyboard.text(
+      `${statusEmoji} ${subscriberName} - ${planName}`,
+      `admin:payment_details:${payment.id}`
+    ).row();
+  }
+
+  keyboard.text('🔄 Refresh', 'admin_pending_payments')
+    .text('« Back', 'start');
+
+  const message = new MessageBuilder()
+    .header('💳', `Pending Payments (${payments.length})`)
+    .break()
+    .line('Select a payment to view details and manually process if needed:')
+    .toString();
+
+  await ctx.reply(message, {
+    parse_mode: 'HTML',
+    reply_markup: keyboard,
+  });
+}
+
+async function showPaymentDetails(ctx: MainBotContext, txId: string) {
+  const { data, error } = await supabase
+    .from('payment_transactions')
+    .select('*, subscribers(username, first_name, telegram_user_id), subscription_plans(name, price_amount, price_currency)')
+    .eq('id', txId)
+    .single();
+
+  const payment = data as any;
+
+  if (error || !payment) {
+    await ctx.reply('❌ Payment not found');
+    return;
+  }
+
+  const keyboard = new InlineKeyboard();
+
+  if (payment.payment_status !== 'CONFIRMED') {
+    keyboard.text('✅ Manual Grant', `admin:manual_grant:${payment.id}`).row();
+  }
+
+  keyboard.text('« Back to Pending', 'admin_pending_payments');
+
+  const subscriberName = payment.subscribers?.username 
+    ? `@${payment.subscribers.username}` 
+    : payment.subscribers?.first_name || 'Unknown';
+
+  const message = new MessageBuilder()
+    .header('💳', 'Payment Details')
+    .break()
+    .field('Subscriber', subscriberName)
+    .field('Plan', payment.subscription_plans?.name || 'Unknown')
+    .field('Amount', `${payment.amount} ${payment.currency}`)
+    .field('Status', payment.payment_status)
+    .field('Invoice ID', payment.nowpayments_invoice_id || 'N/A')
+    .field('Created', formatDate(new Date(payment.created_at)))
+    .break()
+    .line('<b>Manual Grant:</b>')
+    .line('Use this if the webhook failed but you verified payment on blockchain.')
+    .toString();
+
+  await ctx.reply(message, {
+    parse_mode: 'HTML',
+    reply_markup: keyboard,
+  });
+}
+
+async function showManualGrantConfirm(ctx: MainBotContext, txId: string) {
+  const { data } = await supabase
+    .from('payment_transactions')
+    .select('*, subscribers(username, first_name)')
+    .eq('id', txId)
+    .single();
+
+  const payment = data as any;
+
+  if (!payment) {
+    await ctx.reply('❌ Payment not found');
+    return;
+  }
+
+  const subscriberName = payment.subscribers?.username 
+    ? `@${payment.subscribers.username}` 
+    : payment.subscribers?.first_name || 'Unknown';
+
+  const keyboard = new InlineKeyboard()
+    .text('✅ Confirm Grant', `admin:confirm_grant:${payment.id}`)
+    .text('❌ Cancel', `admin:payment_details:${payment.id}`);
+
+  const message = new MessageBuilder()
+    .header('⚠️', 'Confirm Manual Grant')
+    .break()
+    .line(`Are you sure you want to manually grant access for <b>${escapeHtml(subscriberName)}</b>?`)
+    .break()
+    .line('⚠️ <b>Only do this if you have verified the payment on the blockchain!</b>')
+    .break()
+    .line('This will:')
+    .list([
+      'Mark payment as CONFIRMED',
+      'Activate subscription',
+      'Grant channel access'
+    ])
+    .toString();
+
+  await ctx.reply(message, {
+    parse_mode: 'HTML',
+    reply_markup: keyboard,
+  });
+}
+
+async function processManualGrant(ctx: MainBotContext, txId: string) {
+  const adminId = ctx.from?.id.toString() || 'unknown';
+  
+  const result = await manuallyProcessPayment(txId, adminId);
+
+  if (result.success) {
+    const message = new MessageBuilder()
+      .header('✅', 'Payment Processed')
+      .break()
+      .line('Access has been granted successfully!')
+      .line('The subscriber has been notified.')
+      .toString();
+
+    await ctx.reply(message, { parse_mode: 'HTML' });
+    logger.info({ txId, adminId }, 'Payment manually processed by admin');
+  } else {
+    const message = new MessageBuilder()
+      .header('❌', 'Processing Failed')
+      .break()
+      .line(`Error: ${result.error}`)
+      .toString();
+
+    await ctx.reply(message, { parse_mode: 'HTML' });
+    logger.error({ txId, adminId, error: result.error }, 'Manual payment processing failed');
+  }
+}
+

@@ -13,11 +13,11 @@ export async function adminPlanCreationConversation(
 ) {
   // Step 1: Plan Name
   const step1Message = new MessageBuilder()
-    .header('📝', 'Step 1/4: Platform Plan Name')
+    .header('📝', 'Step 1/5: Plan Name')
     .break()
     .line('Enter a name for this platform subscription plan:')
     .break()
-    .info('Example: "Pro - Monthly", "Enterprise"')
+    .info('Example: "Pro - Monthly", "Enterprise", "Starter"')
     .toString();
 
   await ctx.reply(step1Message, { parse_mode: 'HTML' });
@@ -32,7 +32,7 @@ export async function adminPlanCreationConversation(
 
   // Step 2: Price
   const step2Message = new MessageBuilder()
-    .header('💰', 'Step 2/4: Price')
+    .header('💰', 'Step 2/5: Price')
     .break()
     .line('Enter the price in USD:')
     .break()
@@ -49,13 +49,13 @@ export async function adminPlanCreationConversation(
     return;
   }
 
-  // Step 3: Duration
+  // Step 3: Duration (Period)
   const step3Message = new MessageBuilder()
-    .header('📅', 'Step 3/4: Duration')
+    .header('📅', 'Step 3/5: Period (Duration)')
     .break()
     .line('Enter the subscription duration in days:')
     .break()
-    .info('Example: 30 (monthly), 365 (yearly)')
+    .info('Common values: 30 (monthly), 90 (quarterly), 365 (yearly)')
     .toString();
 
   await ctx.reply(step3Message, { parse_mode: 'HTML' });
@@ -68,19 +68,62 @@ export async function adminPlanCreationConversation(
     return;
   }
 
-  // Step 4: Description (optional)
+  // Step 4: Limits (max_bots and max_subscribers)
   const step4Message = new MessageBuilder()
-    .header('📝', 'Step 4/4: Description (Optional)')
+    .header('📊', 'Step 4/5: Limits')
     .break()
-    .line('Enter a short description, or send /skip:')
+    .line('Enter the limits for this plan:')
     .break()
-    .info('Example: "Includes up to 5 bots and 1000 subscribers"')
+    .line('<b>Format:</b> <code>max_bots, max_subscribers</code>')
+    .break()
+    .info('Example: 5, 1000 (5 bots, 1000 subscribers per bot)')
+    .break()
+    .info('Send /unlimited for no limits')
     .toString();
 
   await ctx.reply(step4Message, { parse_mode: 'HTML' });
 
+  const limitsCtx = await conversation.waitFor('message:text');
+  const limitsText = limitsCtx.message.text.trim();
+
+  let maxBots: number | null = null;
+  let maxSubscribers: number | null = null;
+
+  if (limitsText.toLowerCase() !== '/unlimited') {
+    const parts = limitsText.split(',').map(s => s.trim());
+    
+    if (parts.length !== 2) {
+      await ctx.reply('❌ Invalid format. Please enter: max_bots, max_subscribers');
+      return;
+    }
+
+    maxBots = parseInt(parts[0]);
+    maxSubscribers = parseInt(parts[1]);
+
+    if (isNaN(maxBots) || isNaN(maxSubscribers) || maxBots <= 0 || maxSubscribers <= 0) {
+      await ctx.reply('❌ Invalid limits. Both values must be positive numbers.');
+      return;
+    }
+  }
+
+  // Step 5: Description (optional)
+  const step5Message = new MessageBuilder()
+    .header('📝', 'Step 5/5: Description (Optional)')
+    .break()
+    .line('Enter a short description for clients, or send /skip:')
+    .break()
+    .info('Example: "Best for growing channels with moderate traffic"')
+    .toString();
+
+  await ctx.reply(step5Message, { parse_mode: 'HTML' });
+
   const descCtx = await conversation.waitFor('message:text');
   const description = descCtx.message.text === '/skip' ? null : descCtx.message.text.trim();
+
+  // Format limits for display
+  const limitsDisplay = maxBots && maxSubscribers 
+    ? `${maxBots} bots, ${maxSubscribers} subscribers/bot`
+    : 'Unlimited';
 
   // Confirmation
   const keyboard = new InlineKeyboard()
@@ -93,7 +136,8 @@ export async function adminPlanCreationConversation(
     .break()
     .field('Name', name)
     .field('Price', `$${priceAmount} USD`)
-    .field('Duration', `${durationDays} days`)
+    .field('Period', `${durationDays} days`)
+    .field('Limits', limitsDisplay)
     .field('Description', description || 'None')
     .break()
     .line('Create this plan?')
@@ -127,6 +171,8 @@ export async function adminPlanCreationConversation(
         duration_days: durationDays,
         price_amount: priceAmount,
         price_currency: 'USD',
+        max_bots: maxBots,
+        max_subscribers: maxSubscribers,
         is_active: true,
       })
       .select()
@@ -139,14 +185,17 @@ export async function adminPlanCreationConversation(
     const successMessage = new MessageBuilder()
       .header('✅', 'Platform Plan Created!')
       .break()
-      .line(`<b>${plan.name}</b> is now active.`)
+      .field('Name', plan.name)
+      .field('Price', `$${plan.price_amount} USD`)
+      .field('Period', `${plan.duration_days} days`)
+      .field('Limits', limitsDisplay)
       .break()
-      .line('Admin > Platform Settings > Plans')
+      .line('Plan is now active and available for clients.')
       .toString();
 
     await ctx.reply(successMessage, { parse_mode: 'HTML' });
 
-    logger.info({ planId: plan.id, name }, 'Platform plan created');
+    logger.info({ planId: plan.id, name, maxBots, maxSubscribers }, 'Platform plan created');
   } catch (error) {
     logger.error({ error }, 'Failed to create platform plan');
     await ctx.reply('❌ Failed to create plan. Please try again.');

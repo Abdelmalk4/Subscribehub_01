@@ -2,7 +2,7 @@
  * My Bots Handler - Complete Implementation with Channel/Group Linking and Plan CRUD
  */
 
-import { Bot, InlineKeyboard, Keyboard } from 'grammy';
+import { Bot, InlineKeyboard, Keyboard, InputFile } from 'grammy';
 import type { MainBotContext } from '../../../shared/types/index.js';
 import { supabase, type SellingBot, type Subscriber, type SubscriptionPlan } from '../../../database/index.js';
 import { withFooter, formatDate, formatPrice, formatDuration, decrypt, escapeHTML, escapeHtml, MessageBuilder, mainBotLogger as logger } from '../../../shared/utils/index.js';
@@ -143,6 +143,13 @@ export function setupMyBotsHandler(bot: Bot<MainBotContext>) {
       parse_mode: 'HTML',
       reply_markup: keyboard,
     });
+  });
+
+  // Export subscribers CSV
+  bot.callbackQuery(/^export_csv:(.+)$/, clientOnly(), async (ctx) => {
+    const botId = ctx.match[1];
+    await ctx.answerCallbackQuery('Generating CSV...');
+    await exportSubscribersCSV(ctx, botId);
   });
 
   // Handle chat_shared event (when user selects a channel or group)
@@ -455,7 +462,10 @@ async function showBotSubscribers(ctx: MainBotContext, botId: string) {
   
   const message = mb.toString();
 
-  keyboard.text('« Back to Bot', `view_bot:${botId}`);
+  keyboard
+    .text('📥 Export CSV', `export_csv:${botId}`)
+    .row()
+    .text('« Back to Bot', `view_bot:${botId}`);
 
   await ctx.reply(message, {
     parse_mode: 'HTML',
@@ -630,4 +640,64 @@ async function deletePlan(ctx: MainBotContext, planId: string) {
 
   await ctx.reply('🗑️ Plan deleted.');
   await showBotPlans(ctx, plan.bot_id);
+}
+
+async function exportSubscribersCSV(ctx: MainBotContext, botId: string) {
+  try {
+    // Get all subscribers for this bot
+    const { data, error } = await supabase
+      .from('subscribers')
+      .select('*, subscription_plans(name)')
+      .eq('bot_id', botId)
+      .order('created_at', { ascending: false });
+
+    const subscribers = data as Array<Subscriber & { subscription_plans: SubscriptionPlan }> | null;
+
+    if (error || !subscribers || subscribers.length === 0) {
+      await ctx.reply('❌ No subscribers to export.');
+      return;
+    }
+
+    // Generate CSV content
+    const csvHeaders = ['Username', 'First Name', 'Last Name', 'Status', 'Plan', 'Start Date', 'End Date', 'Created At'];
+    const csvRows = subscribers.map(sub => [
+      sub.username || '',
+      sub.first_name || '',
+      sub.last_name || '',
+      sub.subscription_status,
+      sub.subscription_plans?.name || 'N/A',
+      sub.subscription_start_date ? formatDate(new Date(sub.subscription_start_date)) : 'N/A',
+      sub.subscription_end_date ? formatDate(new Date(sub.subscription_end_date)) : 'N/A',
+      formatDate(new Date(sub.created_at))
+    ]);
+
+    // Build CSV string
+    const csvContent = [
+      csvHeaders.join(','),
+      ...csvRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    // Convert to Buffer
+    const csvBuffer = Buffer.from(csvContent, 'utf-8');
+
+    // Get bot info for filename
+    const { data: botData } = await supabase
+      .from('selling_bots')
+      .select('bot_username')
+      .eq('id', botId)
+      .single();
+
+    const bot = botData as { bot_username: string } | null;
+    const filename = `subscribers_${bot?.bot_username || botId}_${new Date().toISOString().split('T')[0]}.csv`;
+
+    // Send as document
+    await ctx.replyWithDocument(new InputFile(csvBuffer, filename), {
+      caption: `📥 Subscriber export for @${bot?.bot_username || 'your bot'}\n\nTotal: ${subscribers.length} subscribers`
+    });
+
+    logger.info({ botId, count: subscribers.length }, 'Subscribers exported to CSV');
+  } catch (error) {
+    logger.error({ error, botId }, 'Failed to export subscribers CSV');
+    await ctx.reply('❌ Failed to generate CSV export. Please try again.');
+  }
 }
